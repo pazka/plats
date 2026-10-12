@@ -1,78 +1,60 @@
 # Deploying plats.hosh.it
 
-Hand-off for the on-box session, **written for the hosh.it box** (Debian 12, edge Traefik v3.3 in
+Deployment of plats on the hosh.it box, (Debian 12, edge Traefik v3.3 in
 host network with the **file provider**, ACME resolver `le`, entrypoint `websecure`; box conventions
 in the owner's `hosh-migration/11-BOX-STANDARD.md`). Split of work: **the owner only runs
 `set-admin.sh`** (admin password + TOTP never pass through a chat); **the on-box Claude runs
 everything else below.** The defaults of `.env.example` already fit the box: nothing to edit.
 
-## 1. On-box runbook (root needed: a `claude-sudo-grant` window opened by the owner)
+## 1. How releases go live (hosh-deploy — the only deploy path on the box)
 
-Box rules apply: an `ACTIONS-LOG.md` intent line BEFORE, result + revert AFTER; full smoke
-(`/home/pazka/MIGRATION/scripts/smoke.sh`) BEFORE and AFTER.
+Since v0.2.4 every release (`release` workflow: tag `vX.Y.Z` or Actions → release) ends with the
+**`deploy`** job: GitHub connects to the box as `deployer` with the repo secret `HOSH_DEPLOY_KEY`
+(bound to plats only on the box) and runs `hosh-deploy deploy plats vX.Y.Z`. The box pulls
+`ghcr.io/pazka/plats:vX.Y.Z`, swaps `PLATS_IMAGE` in `plats.env` (the only line it touches), waits
+healthy, checks `/healthz` on `127.0.0.1:9131` and through Traefik, runs `scripts/smoke.py` inside
+the container (`deploy/hosh-deploy.conf` → `POST_DEPLOY`) and **rolls back by itself** if anything
+fails (the workflow then goes red). Nothing from the repo runs on the host.
 
-### Step A — Claude: get the release into `/srv/plats`
+- Redeploy / roll forward / back: Actions → **deploy** → `vX.Y.Z`, `rollback` or `status`.
+- On the box (owner, or the on-box Claude without a sudo window):
+  `sudo hosh-deploy deploy plats vX.Y.Z` · `sudo hosh-deploy rollback plats` · `sudo hosh-deploy status plats`.
+  Log: `/var/log/hosh-deploy.log`. Box rules still apply (ACTIONS-LOG line, smoke before/after).
+- Repo variable `HOSH_AUTODEPLOY=false` stops auto-deploy after releases (manual dispatch still works).
+- The box owns `/srv/plats/docker-compose.yml`, `plats.env` and the Traefik route
+  (`/root/hosh-deploy/edge/traefik/dynamic/plats.yml`); `hosh-deploy register plats` validated the
+  compose hardening and pinned its sha256 — a changed compose is refused until re-registered.
+
+## 1b. Rebuild from scratch (owner sudo window, on-box Claude)
+
+Box rules: `ACTIONS-LOG.md` intent BEFORE, result + revert AFTER; `/home/pazka/MIGRATION/scripts/smoke.sh`
+BEFORE and AFTER.
 ```sh
 sudo mkdir -p /srv/plats && sudo chmod 750 /srv/plats && cd /srv/plats
 [ -d .git ] || { sudo git init -q && sudo git remote add origin https://github.com/pazka/plats; }
-sudo git fetch -q --depth 1 origin tag v0.2.3 && sudo git checkout -q v0.2.3
+sudo git fetch -q --depth 1 origin tag vX.Y.Z && sudo git checkout -q vX.Y.Z
+[ -e plats.env ] || sudo install -m 600 .env.example plats.env     # no secret yet; never read it afterwards
 ```
-(Repository and image `ghcr.io/pazka/plats` are public: no credentials needed.)
-
-### Step B — Claude: create `plats.env` from the template (no secret in it yet)
+Owner (own SSH terminal, needs a TTY): `sudo bash -c 'cd /srv/plats && bash scripts/set-admin.sh ./plats.env'`
 ```sh
-cd /srv/plats && [ -e plats.env ] || sudo install -m 600 .env.example plats.env
+sudo hosh-deploy register plats            # validates compose hardening, pins it, copies the route template
+sudo hosh-deploy deploy plats vX.Y.Z       # first deploy writes the Traefik route once healthy
+sudo docker compose --project-directory /srv/plats --env-file /srv/plats/plats.env exec -T plats \
+  python scripts/import_wikidata.py         # empty catalogue only (~3 min, ≈985 dishes; idempotent)
 ```
-From here on **never read, print or edit `plats.env`** (it will hold the admin secrets).
+GitHub key (only if the old one is lost): `ssh-keygen -q -t ed25519 -N '' -C hosh-deploy:plats -f /tmp/plats-deploy`,
+`sudo /home/pazka/MIGRATION/scripts/setup-hosh-deploy.sh key plats /tmp/plats-deploy.pub`,
+`gh secret set HOSH_DEPLOY_KEY -R pazka/plats < /tmp/plats-deploy && shred -u /tmp/plats-deploy*`.
 
-### Step C — owner: admin password + TOTP (interactive, in the owner's terminal)
-```sh
-sudo bash -c 'cd /srv/plats && bash scripts/set-admin.sh ./plats.env'   # password ×2, scan the QR, type one code
-```
+`scripts/deploy.sh` (all-in-one first install incl. import) still works off-box or as a fallback,
+but on the hosh.it box releases go through hosh-deploy.
 
-### Step D — Claude: deploy, verify, report
-```sh
-cd /srv/plats && sudo scripts/deploy.sh
-```
-`deploy.sh` is idempotent and never prints secrets. It does, and stops with an explicit message at
-the first problem:
-1. **preflight** — docker + compose v2; `plats.env` exists (forces mode 600); admin hash (argon2id)
-   and TOTP secret present (checked, not printed); `PLATS_BIND` is loopback and not taken by another
-   container; compose config valid; the Traefik route is rendered from `deploy/traefik-route.yml.tmpl`;
-2. **pull + up** (`docker compose --env-file plats.env`, service `plats`, published on `127.0.0.1:9131`);
-3. **wait healthy**, checks uid 10001 and the read-only root filesystem, `http://127.0.0.1:9131/healthz`
-   from the host, then **writes `$TRAEFIK_DYNAMIC_DIR/plats.yml`** (only if changed; the previous one
-   is kept as `.plats.yml.prev`) and confirms through the Traefik API (`127.0.0.1:8899`) that router
-   `plats@file` is `enabled`;
-4. **Wikidata import** if the catalogue has < 100 dishes (~3 minutes, ≈985 dishes; fails below 500);
-5. **smoke checks** inside the container, then **through Traefik** at `https://$PLATS_HOST`
-   (retried while the new certificate is issued) + HSTS header check;
-6. **log report** of the last 15 minutes (errors, 5xx, security events).
+**Revert:** `cd /srv/plats && sudo docker compose --env-file plats.env down` (keeps the `plats-data`
+volume) + `sudo rm /root/hosh-deploy/edge/traefik/dynamic/plats.yml`. DNS `plats` A stays (X.3a).
 
-Options: `--no-import`, `--images` (also download Commons thumbnails), `--skip-external`,
-`--env-file FILE`. Exit code 0 = deployed and verified. Then run the box smoke again
-(`scripts/smoke.sh plats tls edge` at least, `all` for the AFTER record).
-
-**Revert:** `sudo docker compose --env-file plats.env down` in `/srv/plats` (keeps the `plats-data`
-volume) + `sudo rm /root/hosh-deploy/edge/traefik/dynamic/plats.yml` (hot-reload). The DNS record
-`plats` A 54.37.70.57 stays (X.3a).
-
-### Step E — Claude: watch the logs after going live
-```sh
-sudo scripts/logs.sh follow       # live alerts (errors, 5xx, lockouts, CSRF failures, rate-limit bursts)
-                                  # + a summary every 5 min; Ctrl-C to stop
-sudo scripts/logs.sh report 24h   # one-shot summary
-sudo scripts/logs.sh check 1h     # same, exit 1 on any error/5xx (cron-able)
-```
-Then the owner, by hand (2 minutes): play 5 dishes on a phone, log into `/admin` with the TOTP,
-download the export once.
-
-If something fails: `sudo docker compose --env-file plats.env logs --tail 100 plats`, fix the
-variable that the error names (owner, if it is an admin value), re-run `scripts/deploy.sh`.
-
-**Upgrade:** `sudo git fetch -q --depth 1 origin tag vX.Y.Z && sudo git checkout -q vX.Y.Z`, set
-`PLATS_IMAGE` to the same tag (the owner, or `sudo sed -i "s|^PLATS_IMAGE=.*|PLATS_IMAGE='ghcr.io/pazka/plats:vX.Y.Z'|" plats.env`
-— touches only that line), `sudo scripts/deploy.sh`. Rollback = same with the previous tag.
+**Logs:** `sudo scripts/logs.sh follow | report 24h | check 1h` in `/srv/plats` (alerts on errors,
+5xx, lockouts, CSRF failures, rate-limit bursts). Owner by hand once: play 5 dishes on a phone,
+log into `/admin` with the TOTP, download the export.
 
 ## 2. Variables (`plats.env`, mode 600 — template `.env.example`)
 
@@ -80,7 +62,7 @@ One file feeds both docker compose (interpolation) and the container.
 
 | Variable | Default (= hosh.it box) | Notes |
 |---|---|---|
-| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.3` | pin a release tag |
+| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.4` | pin a release tag |
 | `PLATS_HOST` | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
 | `PLATS_ROUTING` | `file` | `file` = loopback port + Traefik file-provider route; `labels` = `docker-compose.labels.yml` (docker provider, Traefik ≥ v3.7) |
 | `PLATS_BIND` | `127.0.0.1:9131` | loopback `host:port` published for Traefik (file mode); must be loopback |
@@ -106,7 +88,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.2.3` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
+| Image | `ghcr.io/pazka/plats:v0.2.4` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
 | Process | uvicorn, 1 worker, port 8000 in the container, **published on `127.0.0.1:9131`** only |
 | Edge | `/root/hosh-deploy/edge/traefik/dynamic/plats.yml` (router `plats@file`, resolver `le`, HSTS middleware) |
 | User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |
@@ -122,7 +104,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
   or Admin → Plats → « Lancer l'import ». Idempotent; never un-hides a dish.
 - **Backup**: `docker compose --env-file plats.env exec plats python -c "import sqlite3; sqlite3.connect('/data/plats.sqlite3').backup(sqlite3.connect('/data/backup.sqlite3'))"`
   then copy `/data/backup.sqlite3` and `/data/.secrets/` off the box. Admin → Export .xlsx too.
-- **Upgrade**: see §1 « Upgrade » (checkout the tag, set `PLATS_IMAGE`, `scripts/deploy.sh`).
+- **Upgrade**: cut a release — it deploys itself (§1). Rollback: Actions → deploy → `rollback`.
 - **Admin password / TOTP reset**: owner runs `scripts/set-admin.sh plats.env`, then `scripts/deploy.sh`.
 - **Tuning** (no restart): Admin → Réglages (rate limits, approval, PoW, anomaly thresholds).
 - **Abuse**: Admin → Tableau de bord (anomalies) → Réponses → bulk delete by visitor / IP hash.
@@ -232,6 +214,11 @@ strips quotes itself if the file is used with `docker run --env-file`.
     `deploy/traefik-route.yml.tmpl` into the edge's dynamic directory after the container is healthy
     and checks the router through the Traefik API. The label setup is kept as
     `docker-compose.labels.yml` (`PLATS_ROUTING=labels`) for when the edge moves to the docker provider.
+
+33. **Deploys go through `hosh-deploy`** (v0.2.4, box Decision #15): the box's generic release
+    runner. GitHub deploys each release over SSH with a key bound to plats; the box swaps the image
+    tag only, verifies (healthy, loopback + HTTPS `/healthz`, router, `scripts/smoke.py` inside the
+    container) and rolls back by itself. `deploy/hosh-deploy.conf` describes plats to the runner.
 
 ## 6. How it was verified
 

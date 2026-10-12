@@ -35,6 +35,8 @@ jobs:
   release:
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
     permissions:
       contents: write
       packages: write
@@ -107,3 +109,13 @@ jobs:
           else
             gh release create "$tag" --title "plats $tag" --notes "$notes" --target "$GITHUB_SHA"
           fi
+
+  # Box standard (Decision #15): every release goes live through hosh-deploy on the hosh.it box,
+  # which verifies it and rolls back by itself. Repo variable HOSH_AUTODEPLOY=false disables this.
+  deploy:
+    needs: release
+    if: vars.HOSH_AUTODEPLOY != 'false'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      version: ${{ needs.release.outputs.tag }}
+    secrets: inherit

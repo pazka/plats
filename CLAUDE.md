@@ -2,7 +2,7 @@
 
 Build the site specified in `BRIEF.md` (read it fully first). Owner: Alexandre (pazka).
 Target box rules: **`docs/BOX-CONTRACT.md` is binding** (Traefik file provider, no docker labels,
-resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, `deploy.sh` writes the edge route).
+resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, releases deploy through `hosh-deploy`).
 
 ## Scope of the cloud builder
 - You work on this GitHub repo only: code, tests, Dockerfile, CI. You have **no access to the
@@ -30,10 +30,10 @@ resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, `deploy.sh` writes 
 - Box rules (`/home/pazka/MIGRATION/CLAUDE.md`, `11-BOX-STANDARD.md`): `ACTIONS-LOG.md` intent
   BEFORE + result/revert AFTER; `scripts/smoke.sh` BEFORE and AFTER; root only inside an
   owner-opened sudo window.
-- Follow `DEPLOY.md` §1 exactly: checkout the release tag into `/srv/plats`, create `plats.env`
-  from `.env.example` (no edit: defaults fit the box), owner runs `set-admin.sh`, then
-  `sudo scripts/deploy.sh` (it also writes the Traefik route), then `scripts/logs.sh`. Run only
-  those commands plus read-only diagnostics (`docker ps`, `docker compose … logs`, Traefik API).
+- Releases deploy themselves through the box runner (DEPLOY.md §1). You may run
+  `sudo hosh-deploy deploy|rollback|status plats …` any time (no sudo window needed), with an
+  ACTIONS-LOG line and smoke before/after. A rebuild follows DEPLOY.md §1b inside an owner sudo
+  window. Otherwise only read-only diagnostics (`docker ps`, `docker compose … logs`, Traefik API).
 - Once the owner has run `set-admin.sh`, **never print, cat, grep, copy or edit `plats.env`**
   (sole exception: the one-line `PLATS_IMAGE` sed of an upgrade, DEPLOY.md §1). If a variable is
   wrong, tell the owner which one (the script's error says it) and stop.
