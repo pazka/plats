@@ -417,7 +417,18 @@ async def votes_delete(request: Request, deps=Depends(admin_form)):
 
 # ------------------------------------------------------------------ categories
 
-COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+COLOR_RE = re.compile(r"^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
+
+
+def normalize_color(value: str) -> str | None:
+    """'#abc', 'abc', '#AABBCC', 'aabbcc' -> '#AABBCC'; anything else -> None."""
+    m = COLOR_RE.match(value.strip())
+    if not m:
+        return None
+    h = m.group(1)
+    if len(h) == 3:
+        h = "".join(ch * 2 for ch in h)
+    return "#" + h.upper()
 
 
 @router.get("/categories")
@@ -433,13 +444,13 @@ async def categories_save(request: Request, deps=Depends(admin_form)):
     conn, form = deps
     action = str(form.get("action", ""))
     name = str(form.get("name", "")).strip()[:40]
-    color = str(form.get("color", "")).strip()
+    color = normalize_color(str(form.get("color", "")))
     emoji = str(form.get("emoji", "")).strip()[:8]
     try:
         position = int(form.get("position") or 0)
     except ValueError:
         position = 0
-    if action in ("create", "update") and (not name or not COLOR_RE.match(color)):
+    if action in ("create", "update") and (not name or not color):
         return back("/admin/categories", err="Nom requis et couleur au format #RRGGBB.")
     with db.Tx(conn):
         if action == "create":
@@ -448,13 +459,13 @@ async def categories_save(request: Request, deps=Depends(admin_form)):
                 return back("/admin/categories", err="Ce slug existe déjà.")
             conn.execute("INSERT INTO categories(slug, name, color, emoji, position, active, created_at)"
                          " VALUES (?,?,?,?,?,1,?)", (slug, name, color, emoji, position, int(time.time())))
-            audit(request, conn, "category_create", {"slug": slug, "name": name})
+            audit(request, conn, "category_create", {"slug": slug, "name": name, "color": color})
         elif action == "update":
             cid = int(form.get("id", 0))
             active = 1 if form.get("active") == "1" else 0
             conn.execute("UPDATE categories SET name = ?, color = ?, emoji = ?, position = ?, active = ? WHERE id = ?",
                          (name, color, emoji, position, active, cid))
-            audit(request, conn, "category_update", {"id": cid, "name": name, "active": active})
+            audit(request, conn, "category_update", {"id": cid, "name": name, "color": color, "active": active})
         elif action == "delete":
             cid = int(form.get("id", 0))
             if conn.execute("SELECT 1 FROM votes WHERE category_id = ? LIMIT 1", (cid,)).fetchone():

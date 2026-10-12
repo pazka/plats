@@ -183,6 +183,37 @@ def test_category_with_votes_cannot_be_deleted(admin, conn, dishes):
     assert conn.execute("SELECT COUNT(*) FROM categories WHERE id = 1").fetchone()[0] == 1
 
 
+def test_category_color_update_every_row(admin, conn):
+    """Every category's colour is editable, typed in any common hex form; stored as #RRGGBB."""
+    rows = conn.execute("SELECT id, name, emoji, position FROM categories ORDER BY id").fetchall()
+    for i, c in enumerate(rows):
+        typed = ["#1a2b3c", "1A2B3C", "#abc", "abc"][i % 4]
+        r = admin.post("/admin/categories", follow_redirects=False, data={
+            "csrf": csrf(admin), "action": "update", "id": str(c["id"]), "name": c["name"],
+            "color": f"  {typed} ", "emoji": c["emoji"], "position": str(c["position"]), "active": "1"})
+        assert "ok=" in r.headers["location"], c["id"]
+        want = "#1A2B3C" if i % 4 < 2 else "#AABBCC"
+        assert conn.execute("SELECT color FROM categories WHERE id = ?", (c["id"],)).fetchone()[0] == want
+
+
+def test_category_color_rejects_garbage(admin, conn):
+    before = conn.execute("SELECT color FROM categories WHERE id = 1").fetchone()[0]
+    for bad in ("", "red", "#12345", "#ggg000", "url(x)"):
+        r = admin.post("/admin/categories", follow_redirects=False, data={
+            "csrf": csrf(admin), "action": "update", "id": "1", "name": "X", "color": bad, "position": "1"})
+        assert "err=" in r.headers["location"], bad
+    assert conn.execute("SELECT color FROM categories WHERE id = 1").fetchone()[0] == before
+
+
+def test_category_page_has_typed_color_field(admin):
+    html = admin.get("/admin/categories").text
+    assert 'name="color" id="color-1" value="#' in html
+    assert 'data-color-for="color-1"' in html
+    # the native picker is not submitted: only the typed field is
+    assert html.count('type="color" value=') == html.count("data-color-for=")
+    assert 'type="color" name="color"' not in html
+
+
 def test_submission_queue_approve(admin, conn):
     from app import services
     did = services.create_dish(conn, title="Plat en attente", description="x" * 30, source="user", status="pending")

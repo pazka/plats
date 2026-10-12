@@ -16,7 +16,11 @@ form.inline { display: inline; }
 .inline-form label { margin: 0; }
 .table td input, .table td select { margin: 0; padding: 4px 6px; }
 .table .num, input.num { width: 5em; }
-.table input[type=color] { width: 3em; height: 2em; padding: 0; }
+.table input[type=color], .color-cell input[type=color] { width: 3em; height: 2em; padding: 0; vertical-align: middle; }
+.color-cell { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.table .color-cell { flex-direction: column; align-items: flex-start; }
+.table-scroll { overflow-x: auto; }
+.color-cell .hex { width: 6em; margin: 0; font-family: ui-monospace, monospace; text-transform: uppercase; }
 .tag { display: inline-block; padding: 0 8px; border-radius: 6px; font-size: 0.8rem; background: #e3e3ee; color: #222; }
 .tag-active { background: #d4f1dc; color: #0f4d22; }
 .tag-hidden, .tag-rejected, .tag-merged { background: #e7e7e7; color: #444; }
