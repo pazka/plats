@@ -1,6 +1,6 @@
 name: deploy
 
-# Deploy a release to the hosh.it box through hosh-deploy (box standard, Decision #15).
+# Deploy a release to the hosh.it box through hosh-deploy (box standard, Decision #16).
 # - called by release.yml after a successful release (auto-deploy; repo variable
 #   HOSH_AUTODEPLOY=false turns that off)
 # - or by hand: Actions → deploy → "vX.Y.Z" (redeploy / roll forward), "rollback" or "status".

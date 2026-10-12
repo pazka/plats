@@ -110,7 +110,7 @@ jobs:
             gh release create "$tag" --title "plats $tag" --notes "$notes" --target "$GITHUB_SHA"
           fi
 
-  # Box standard (Decision #15): every release goes live through hosh-deploy on the hosh.it box,
+  # Box standard (Decision #16): every release goes live through hosh-deploy on the hosh.it box,
   # which verifies it and rolls back by itself. Repo variable HOSH_AUTODEPLOY=false disables this.
   deploy:
     needs: release

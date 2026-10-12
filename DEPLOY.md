@@ -215,7 +215,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
     and checks the router through the Traefik API. The label setup is kept as
     `docker-compose.labels.yml` (`PLATS_ROUTING=labels`) for when the edge moves to the docker provider.
 
-33. **Deploys go through `hosh-deploy`** (v0.2.4, box Decision #15): the box's generic release
+33. **Deploys go through `hosh-deploy`** (v0.2.4, box Decision #16): the box's generic release
     runner. GitHub deploys each release over SSH with a key bound to plats; the box swaps the image
     tag only, verifies (healthy, loopback + HTTPS `/healthz`, router, `scripts/smoke.py` inside the
     container) and rolls back by itself. `deploy/hosh-deploy.conf` describes plats to the runner.
