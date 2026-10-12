@@ -1,80 +1,103 @@
 # Deploying plats.hosh.it
 
-Hand-off for the on-box session. Split of work: **the owner prepares `plats.env`** (variables and
-admin credentials, which never pass through a chat); **the on-box Claude runs the commands below and
-nothing else.** Everything here was rehearsed on a simulated box (real Traefik, HTTPS, `deploy.sh`,
-then the full browser suite through Traefik — see §6).
+Hand-off for the on-box session, **written for the hosh.it box** (Debian 12, edge Traefik v3.3 in
+host network with the **file provider**, ACME resolver `le`, entrypoint `websecure`; box conventions
+in the owner's `hosh-migration/11-BOX-STANDARD.md`). Split of work: **the owner only runs
+`set-admin.sh`** (admin password + TOTP never pass through a chat); **the on-box Claude runs
+everything else below.** The defaults of `.env.example` already fit the box: nothing to edit.
 
-## 1. On-box runbook
+## 1. On-box runbook (root needed: a `claude-sudo-grant` window opened by the owner)
 
-### Step A — Claude: get the release (any directory; `/srv/plats` below)
+Box rules apply: an `ACTIONS-LOG.md` intent line BEFORE, result + revert AFTER; full smoke
+(`/home/pazka/MIGRATION/scripts/smoke.sh`) BEFORE and AFTER.
+
+### Step A — Claude: get the release into `/srv/plats`
 ```sh
-mkdir -p /srv/plats && cd /srv/plats
-if [ ! -d .git ]; then git init -q && git remote add origin https://github.com/pazka/plats; fi
-git fetch -q --depth 1 origin tag v0.2.1 && git checkout -q v0.2.1
+sudo mkdir -p /srv/plats && sudo chmod 750 /srv/plats && cd /srv/plats
+[ -d .git ] || { sudo git init -q && sudo git remote add origin https://github.com/pazka/plats; }
+sudo git fetch -q --depth 1 origin tag v0.2.2 && sudo git checkout -q v0.2.2
 ```
-(The repository and the image `ghcr.io/pazka/plats` are public: no credentials needed. Works even if
-`plats.env` was already put in the directory.)
+(Repository and image `ghcr.io/pazka/plats` are public: no credentials needed.)
 
-### Step B — owner: prepare `plats.env` (Claude must not read or print it)
+### Step B — Claude: create `plats.env` from the template (no secret in it yet)
 ```sh
-cd /srv/plats
-install -m 600 .env.example plats.env      # then edit: PLATS_HOST, TRAEFIK_* (see §2)
-bash scripts/set-admin.sh ./plats.env      # interactive: password ×2, scan the QR, type one code
+cd /srv/plats && [ -e plats.env ] || sudo install -m 600 .env.example plats.env
+```
+From here on **never read, print or edit `plats.env`** (it will hold the admin secrets).
+
+### Step C — owner: admin password + TOTP (interactive, in the owner's terminal)
+```sh
+sudo bash -c 'cd /srv/plats && bash scripts/set-admin.sh ./plats.env'   # password ×2, scan the QR, type one code
 ```
 
-### Step C — Claude: deploy, verify, report
+### Step D — Claude: deploy, verify, report
 ```sh
-cd /srv/plats && scripts/deploy.sh
+cd /srv/plats && sudo scripts/deploy.sh
 ```
 `deploy.sh` is idempotent and never prints secrets. It does, and stops with an explicit message at
 the first problem:
-1. **preflight** — docker + compose v2; `plats.env` exists (forces mode 600); the admin hash
-   (argon2id) and TOTP secret are present (checked, not printed); the Traefik network exists
-   (lists the host's networks if not); compose config valid;
-2. **pull + up** (`docker compose --env-file plats.env`, service `plats`);
-3. **wait healthy**, then checks uid 10001 and the read-only root filesystem;
+1. **preflight** — docker + compose v2; `plats.env` exists (forces mode 600); admin hash (argon2id)
+   and TOTP secret present (checked, not printed); `PLATS_BIND` is loopback and not taken by another
+   container; compose config valid; the Traefik route is rendered from `deploy/traefik-route.yml.tmpl`;
+2. **pull + up** (`docker compose --env-file plats.env`, service `plats`, published on `127.0.0.1:9131`);
+3. **wait healthy**, checks uid 10001 and the read-only root filesystem, `http://127.0.0.1:9131/healthz`
+   from the host, then **writes `$TRAEFIK_DYNAMIC_DIR/plats.yml`** (only if changed; the previous one
+   is kept as `.plats.yml.prev`) and confirms through the Traefik API (`127.0.0.1:8899`) that router
+   `plats@file` is `enabled`;
 4. **Wikidata import** if the catalogue has < 100 dishes (~3 minutes, ≈985 dishes; fails below 500);
 5. **smoke checks** inside the container, then **through Traefik** at `https://$PLATS_HOST`
-   (+ HSTS header check);
+   (retried while the new certificate is issued) + HSTS header check;
 6. **log report** of the last 15 minutes (errors, 5xx, security events).
 
 Options: `--no-import`, `--images` (also download Commons thumbnails), `--skip-external`,
-`--env-file FILE`. Exit code 0 = deployed and verified.
+`--env-file FILE`. Exit code 0 = deployed and verified. Then run the box smoke again
+(`scripts/smoke.sh plats tls edge` at least, `all` for the AFTER record).
 
-### Step D — Claude: watch the logs after going live
+**Revert:** `sudo docker compose --env-file plats.env down` in `/srv/plats` (keeps the `plats-data`
+volume) + `sudo rm /root/hosh-deploy/edge/traefik/dynamic/plats.yml` (hot-reload). The DNS record
+`plats` A 54.37.70.57 stays (X.3a).
+
+### Step E — Claude: watch the logs after going live
 ```sh
-scripts/logs.sh follow        # live alerts (errors, 5xx, lockouts, CSRF failures, rate-limit bursts)
-                              # + a summary every 5 min; Ctrl-C to stop
-scripts/logs.sh report 24h    # one-shot summary
-scripts/logs.sh check 1h      # same, exit 1 on any error/5xx (cron-able)
+sudo scripts/logs.sh follow       # live alerts (errors, 5xx, lockouts, CSRF failures, rate-limit bursts)
+                                  # + a summary every 5 min; Ctrl-C to stop
+sudo scripts/logs.sh report 24h   # one-shot summary
+sudo scripts/logs.sh check 1h     # same, exit 1 on any error/5xx (cron-able)
 ```
 Then the owner, by hand (2 minutes): play 5 dishes on a phone, log into `/admin` with the TOTP,
 download the export once.
 
-If something fails: `docker compose --env-file plats.env logs --tail 100 plats`, fix the variable
-that the error names, re-run `scripts/deploy.sh`.
+If something fails: `sudo docker compose --env-file plats.env logs --tail 100 plats`, fix the
+variable that the error names (owner, if it is an admin value), re-run `scripts/deploy.sh`.
+
+**Upgrade:** `sudo git fetch -q --depth 1 origin tag vX.Y.Z && sudo git checkout -q vX.Y.Z`, set
+`PLATS_IMAGE` to the same tag (the owner, or `sudo sed -i "s|^PLATS_IMAGE=.*|PLATS_IMAGE='ghcr.io/pazka/plats:vX.Y.Z'|" plats.env`
+— touches only that line), `sudo scripts/deploy.sh`. Rollback = same with the previous tag.
 
 ## 2. Variables (`plats.env`, mode 600 — template `.env.example`)
 
 One file feeds both docker compose (interpolation) and the container.
 
-| Variable | Who | Default | Notes |
-|---|---|---|---|
-| `PLATS_IMAGE` | owner | `ghcr.io/pazka/plats:v0.2.1` | pin a release tag |
-| `PLATS_HOST` | owner | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
-| `TRAEFIK_NETWORK` | owner | `traefik` | docker network Traefik is attached to (`docker network ls`) |
-| `TRAEFIK_ENTRYPOINT` | owner | `websecure` | Traefik's HTTPS entrypoint name |
-| `TRAEFIK_CERTRESOLVER` | owner | `letsencrypt` | ACME resolver name; **empty** = no resolver (file/wildcard certificate) |
-| `PLATS_ADMIN_PASSWORD_HASH` | `set-admin.sh` | — | argon2id; empty ⇒ admin login disabled |
-| `PLATS_ADMIN_TOTP_SECRET` | `set-admin.sh` | — | base32 |
-| `PLATS_SECRET_KEY` | optional | generated in `/data/.secrets/` | signs cookies/tokens; changing it resets every visitor |
-| `PLATS_IP_SALT` | optional | generated in `/data/.secrets/` | HMAC key of IP hashes |
-| `PLATS_TRUSTED_PROXIES` | optional | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | `X-Forwarded-For` honoured only from these peers (Traefik) |
-| `PLATS_COOKIE_SECURE` | optional | `1` | keep 1 behind HTTPS |
-| `PLATS_CONTACT` | optional | GitHub link | shown on `/a-propos` |
-| `PLATS_POW_DIFFICULTY` | optional | `16` | proposal proof-of-work bits (≈1 s on a phone) |
-| `PLATS_LOG_CLIENT_IP` | optional | `0` | 1 = raw IP in stdout security lines (never in the DB) |
+| Variable | Default (= hosh.it box) | Notes |
+|---|---|---|
+| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.2` | pin a release tag |
+| `PLATS_HOST` | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
+| `PLATS_ROUTING` | `file` | `file` = loopback port + Traefik file-provider route; `labels` = `docker-compose.labels.yml` (docker provider, Traefik ≥ v3.7) |
+| `PLATS_BIND` | `127.0.0.1:9131` | loopback `host:port` published for Traefik (file mode); must be loopback |
+| `TRAEFIK_DYNAMIC_DIR` | `/root/hosh-deploy/edge/traefik/dynamic` | where deploy.sh writes `plats.yml` (file mode); empty = print it instead |
+| `TRAEFIK_API` | `http://127.0.0.1:8899` | read-only Traefik API, to confirm the router is enabled; empty = skip |
+| `TRAEFIK_ENTRYPOINT` | `websecure` | Traefik's HTTPS entrypoint |
+| `TRAEFIK_CERTRESOLVER` | `le` | ACME resolver; **empty** = no resolver (file/wildcard certificate) |
+| `TRAEFIK_NETWORK` | `traefik` | labels mode only: docker network Traefik is attached to |
+| `PLATS_ADMIN_PASSWORD_HASH` | written by `set-admin.sh` | argon2id; empty ⇒ admin login disabled |
+| `PLATS_ADMIN_TOTP_SECRET` | written by `set-admin.sh` | base32 |
+| `PLATS_SECRET_KEY` | generated in `/data/.secrets/` | signs cookies/tokens; changing it resets every visitor |
+| `PLATS_IP_SALT` | generated in `/data/.secrets/` | HMAC key of IP hashes |
+| `PLATS_TRUSTED_PROXIES` | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | `X-Forwarded-For` honoured only from these peers. File mode: Traefik reaches the container through docker's port proxy, so the peer is the compose network gateway (172.x) — covered |
+| `PLATS_COOKIE_SECURE` | `1` | keep 1 behind HTTPS |
+| `PLATS_CONTACT` | GitHub link | shown on `/a-propos` |
+| `PLATS_POW_DIFFICULTY` | `16` | proposal proof-of-work bits (≈1 s on a phone) |
+| `PLATS_LOG_CLIENT_IP` | `0` | 1 = raw IP in stdout security lines (never in the DB) |
 
 Single-quoted values are literal for compose (the `$` of the argon2 hash is safe); the app also
 strips quotes itself if the file is used with `docker run --env-file`.
@@ -83,13 +106,14 @@ strips quotes itself if the file is used with `docker run --env-file`.
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.2.1` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
-| Process | uvicorn, 1 worker, **port 8000** (HTTP behind Traefik, not published) |
+| Image | `ghcr.io/pazka/plats:v0.2.2` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
+| Process | uvicorn, 1 worker, port 8000 in the container, **published on `127.0.0.1:9131`** only |
+| Edge | `/root/hosh-deploy/edge/traefik/dynamic/plats.yml` (router `plats@file`, resolver `le`, HSTS middleware) |
 | User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |
-| Volume | **`/data`**: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional) |
+| Volume | **`plats_plats-data`** → `/data`: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional). Under `/var/lib/docker/volumes`, so in the monthly restic golden backup |
 | Health | **`GET /healthz`** → `{"status":"ok","schema":2,"active_dishes":N,"categories":10}` (Docker healthcheck too); `HEAD` supported |
 | Migrations | automatic at start |
-| Logs | JSON lines on stdout, `ip_hash` only (no raw IP) |
+| Logs | JSON lines on stdout, `ip_hash` only (no raw IP); Traefik's access log covers the host for CrowdSec |
 | Outbound | only the importer: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
 
 ## 4. Operations
@@ -98,7 +122,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
   or Admin → Plats → « Lancer l'import ». Idempotent; never un-hides a dish.
 - **Backup**: `docker compose --env-file plats.env exec plats python -c "import sqlite3; sqlite3.connect('/data/plats.sqlite3').backup(sqlite3.connect('/data/backup.sqlite3'))"`
   then copy `/data/backup.sqlite3` and `/data/.secrets/` off the box. Admin → Export .xlsx too.
-- **Upgrade**: set `PLATS_IMAGE` to the new tag, `scripts/deploy.sh`.
+- **Upgrade**: see §1 « Upgrade » (checkout the tag, set `PLATS_IMAGE`, `scripts/deploy.sh`).
 - **Admin password / TOTP reset**: owner runs `scripts/set-admin.sh plats.env`, then `scripts/deploy.sh`.
 - **Tuning** (no restart): Admin → Réglages (rate limits, approval, PoW, anomaly thresholds).
 - **Abuse**: Admin → Tableau de bord (anomalies) → Réponses → bulk delete by visitor / IP hash.
@@ -201,6 +225,13 @@ strips quotes itself if the file is used with `docker run --env-file`.
 31. **No emoji on the answer buttons** (owner request, v0.2.1): a picture steers the answer, so
     the buttons show the category name (and its colour) only. Emoji still appear *after* the
     answer (result line, dish pages, stats) and stay editable in Admin → Catégories.
+
+32. **hosh.it box routing = file provider** (v0.2.2): the box's edge Traefik is v3.3 in host
+    network with the file provider (its docker provider needs ≥ v3.7), so the default is
+    `PLATS_ROUTING=file` — container published on loopback `127.0.0.1:9131`, `deploy.sh` renders
+    `deploy/traefik-route.yml.tmpl` into the edge's dynamic directory after the container is healthy
+    and checks the router through the Traefik API. The label setup is kept as
+    `docker-compose.labels.yml` (`PLATS_ROUTING=labels`) for when the edge moves to the docker provider.
 
 ## 6. How it was verified
 

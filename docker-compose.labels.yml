@@ -1,0 +1,24 @@
+# Overlay for PLATS_ROUTING=labels (Traefik docker provider; on the hosh.it box this needs the edge
+# Traefik upgraded to >= v3.7 — until then the box uses PLATS_ROUTING=file, the default).
+#   docker compose --env-file plats.env -f docker-compose.yml -f docker-compose.labels.yml up -d
+# (scripts/deploy.sh does this when PLATS_ROUTING=labels.)
+services:
+  plats:
+    networks: [default, traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.routers.plats.rule=Host(`${PLATS_HOST:-plats.hosh.it}`)
+      - traefik.http.routers.plats.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.plats.tls=true
+      - traefik.http.routers.plats.tls.certresolver=${TRAEFIK_CERTRESOLVER-le}
+      - traefik.http.services.plats.loadbalancer.server.port=8000
+      # HSTS is set by Traefik (the app sets CSP and the other security headers itself).
+      - traefik.http.middlewares.plats-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.plats-hsts.headers.stsIncludeSubdomains=true
+      - traefik.http.routers.plats.middlewares=plats-hsts
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true

@@ -1,6 +1,8 @@
 # CLAUDE.md — pazka/plats
 
 Build the site specified in `BRIEF.md` (read it fully first). Owner: Alexandre (pazka).
+Target box rules: **`docs/BOX-CONTRACT.md` is binding** (Traefik file provider, no docker labels,
+resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, `deploy.sh` writes the edge route).
 
 ## Scope of the cloud builder
 - You work on this GitHub repo only: code, tests, Dockerfile, CI. You have **no access to the
@@ -25,11 +27,15 @@ Build the site specified in `BRIEF.md` (read it fully first). Owner: Alexandre (
 - Commit in small, clearly described steps on `main`.
 
 ## If you are the on-box deployment session (production server)
-- Follow `DEPLOY.md` §1 exactly: fetch the release tag, then `scripts/deploy.sh`, then
-  `scripts/logs.sh follow` / `report`. Run only those commands (plus read-only diagnostics such as
-  `docker ps`, `docker network ls`, `docker compose … logs`).
-- `plats.env` is prepared by the owner. **Never print, cat, grep, copy or edit it**, never echo
-  secrets; `deploy.sh` validates it without showing values. If a variable is wrong, tell the owner
-  which one (the script's error says it) and stop.
-- Never run `scripts/set-admin.sh` yourself (it is interactive and owner-only), never change code
-  on the box, never delete the `plats-data` volume.
+- Box rules (`/home/pazka/MIGRATION/CLAUDE.md`, `11-BOX-STANDARD.md`): `ACTIONS-LOG.md` intent
+  BEFORE + result/revert AFTER; `scripts/smoke.sh` BEFORE and AFTER; root only inside an
+  owner-opened sudo window.
+- Follow `DEPLOY.md` §1 exactly: checkout the release tag into `/srv/plats`, create `plats.env`
+  from `.env.example` (no edit: defaults fit the box), owner runs `set-admin.sh`, then
+  `sudo scripts/deploy.sh` (it also writes the Traefik route), then `scripts/logs.sh`. Run only
+  those commands plus read-only diagnostics (`docker ps`, `docker compose … logs`, Traefik API).
+- Once the owner has run `set-admin.sh`, **never print, cat, grep, copy or edit `plats.env`**
+  (sole exception: the one-line `PLATS_IMAGE` sed of an upgrade, DEPLOY.md §1). If a variable is
+  wrong, tell the owner which one (the script's error says it) and stop.
+- Never run `scripts/set-admin.sh` yourself (interactive, owner-only), never change code on the
+  box, never delete the `plats-data` volume.

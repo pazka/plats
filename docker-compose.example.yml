@@ -1,9 +1,13 @@
-# Deployment behind Traefik (no secrets here). scripts/deploy.sh copies it to docker-compose.yml.
+# Deployment on the hosh.it box (no secrets here). scripts/deploy.sh copies it to docker-compose.yml.
 # Every site-specific value comes from plats.env, used both for interpolation and by the container:
 #   docker compose --env-file plats.env up -d          (scripts/deploy.sh does this for you)
+# Routing = hosh.it box standard: the container is published on a LOOPBACK port (PLATS_BIND) and the
+# edge Traefik (host network, file provider) routes plats.hosh.it to it via deploy/traefik-route.yml.tmpl,
+# which deploy.sh renders into the Traefik dynamic directory. PLATS_ROUTING=labels adds
+# docker-compose.labels.yml instead (Traefik docker provider; needs Traefik >= v3.7 on the box).
 services:
   plats:
-    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.1}
+    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.2}
     container_name: plats
     restart: unless-stopped
     env_file: ${PLATS_ENV_FILE:-./plats.env}   # chmod 600; see .env.example
@@ -28,26 +32,9 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
-    # No published port: Traefik reaches the container on the shared network, port 8000.
-    expose: ["8000"]
-    networks: [traefik]
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
-      - traefik.http.routers.plats.rule=Host(`${PLATS_HOST:-plats.hosh.it}`)
-      - traefik.http.routers.plats.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
-      - traefik.http.routers.plats.tls=true
-      - traefik.http.routers.plats.tls.certresolver=${TRAEFIK_CERTRESOLVER-letsencrypt}
-      - traefik.http.services.plats.loadbalancer.server.port=8000
-      # HSTS is set by Traefik (the app sets CSP and the other security headers itself).
-      - traefik.http.middlewares.plats-hsts.headers.stsSeconds=31536000
-      - traefik.http.middlewares.plats-hsts.headers.stsIncludeSubdomains=true
-      - traefik.http.routers.plats.middlewares=plats-hsts
+    # Loopback only: the edge Traefik (host network) is the only client. Never 0.0.0.0.
+    ports:
+      - "${PLATS_BIND:-127.0.0.1:9131}:8000"
 
 volumes:
   plats-data:
-
-networks:
-  traefik:
-    name: ${TRAEFIK_NETWORK:-traefik}
-    external: true
