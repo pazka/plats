@@ -49,7 +49,7 @@ esac
 echo "admin TOTP secret: present"
 [ "$(var PLATS_COOKIE_SECURE)" = "0" ] && red "warning: PLATS_COOKIE_SECURE=0 — cookies will not be Secure (OK only for plain-http tests)"
 
-IMAGE="$(var PLATS_IMAGE)"; IMAGE="${IMAGE:-ghcr.io/pazka/plats:v0.1.1}"
+IMAGE="$(var PLATS_IMAGE)"; IMAGE="${IMAGE:-ghcr.io/pazka/plats:v0.2.0}"
 HOST="$(var PLATS_HOST)"; HOST="${HOST:-plats.hosh.it}"
 NET="$(var TRAEFIK_NETWORK)"; NET="${NET:-traefik}"
 if ! docker network inspect "$NET" >/dev/null 2>&1; then

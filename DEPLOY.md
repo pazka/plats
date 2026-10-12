@@ -11,7 +11,7 @@ then the full browser suite through Traefik — see §6).
 ```sh
 mkdir -p /srv/plats && cd /srv/plats
 if [ ! -d .git ]; then git init -q && git remote add origin https://github.com/pazka/plats; fi
-git fetch -q --depth 1 origin tag v0.1.1 && git checkout -q v0.1.1
+git fetch -q --depth 1 origin tag v0.2.0 && git checkout -q v0.2.0
 ```
 (The repository and the image `ghcr.io/pazka/plats` are public: no credentials needed. Works even if
 `plats.env` was already put in the directory.)
@@ -61,7 +61,7 @@ One file feeds both docker compose (interpolation) and the container.
 
 | Variable | Who | Default | Notes |
 |---|---|---|---|
-| `PLATS_IMAGE` | owner | `ghcr.io/pazka/plats:v0.1.1` | pin a release tag |
+| `PLATS_IMAGE` | owner | `ghcr.io/pazka/plats:v0.2.0` | pin a release tag |
 | `PLATS_HOST` | owner | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
 | `TRAEFIK_NETWORK` | owner | `traefik` | docker network Traefik is attached to (`docker network ls`) |
 | `TRAEFIK_ENTRYPOINT` | owner | `websecure` | Traefik's HTTPS entrypoint name |
@@ -83,11 +83,11 @@ strips quotes itself if the file is used with `docker run --env-file`.
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.1.1` (`:latest`, `:0.1`; each `main` commit: `:ci`, `:<sha>`) |
+| Image | `ghcr.io/pazka/plats:v0.2.0` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
 | Process | uvicorn, 1 worker, **port 8000** (HTTP behind Traefik, not published) |
 | User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |
 | Volume | **`/data`**: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional) |
-| Health | **`GET /healthz`** → `{"status":"ok","schema":1,"active_dishes":N,"categories":9}` (Docker healthcheck too); `HEAD` supported |
+| Health | **`GET /healthz`** → `{"status":"ok","schema":2,"active_dishes":N,"categories":10}` (Docker healthcheck too); `HEAD` supported |
 | Migrations | automatic at start |
 | Logs | JSON lines on stdout, `ip_hash` only (no raw IP) |
 | Outbound | only the importer: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
@@ -194,6 +194,10 @@ strips quotes itself if the file is used with `docker run --env-file`.
 29. **frwiki enrichment is paced** (~20 req/s, serial, honours `Retry-After` on 429/503); unpaced,
     Wikimedia throttled it to 53 successes out of ~800. A re-run never replaces a longer
     (e.g. enriched) description by a shorter one.
+30. **10th category « Saucisse » 🌭** (owner request, v0.2.0), colour `#D55E00` (Okabe-Ito
+    vermillion, distinct from the nine muted colours), placed last. Added by **migration 2**, so
+    an existing database gets it on upgrade too (skipped if a `saucisse` category already exists).
+    Keyboard: **1–9 and 0** answer (0 = 10th category), **P** = « Je ne connais pas » (was 0).
 
 ## 6. How it was verified
 
