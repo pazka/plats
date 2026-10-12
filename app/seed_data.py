@@ -15,6 +15,9 @@ CATEGORIES = [
     ("salade", "Salade", "#44AA99", "🥗"),
 ]
 
+# Added by migration 2 (v0.2.0). Okabe-Ito vermillion: distinct from the 9 muted colours above.
+CATEGORY_SAUCISSE = ("saucisse", "Saucisse", "#D55E00", "🌭")
+
 DEFAULT_SETTINGS = {
     "require_approval": "0",
     # "count/window" pairs, comma separated; window suffix s, m, h or d.

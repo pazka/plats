@@ -27,7 +27,7 @@ def test_no_external_resources_in_pages(client, dishes):
 
 def test_healthz(client):
     body = client.get("/healthz").json()
-    assert body["status"] == "ok" and body["categories"] == 9
+    assert body["status"] == "ok" and body["categories"] == 10 and body["schema"] == 2
 
 
 def test_xff_trusted_only_from_proxy(app, conn, dishes, no_think):
@@ -127,3 +127,47 @@ def test_head_requests_answered_like_get(app):
     r = c.head("/")
     assert r.status_code == 200 and r.content == b"" and "content-security-policy" in r.headers
     assert c.head("/healthz").status_code == 200
+
+
+def test_migration_2_adds_saucisse_once(tmp_path):
+    import sqlite3
+    from app import db
+    path = tmp_path / "old.sqlite3"
+    # a database as created by v0.1.x (schema 1 only)
+    saved = db.MIGRATIONS[:]
+    try:
+        db.MIGRATIONS[:] = saved[:1]
+        assert db.migrate(path) == 1
+    finally:
+        db.MIGRATIONS[:] = saved
+    assert db.migrate(path) == 2
+    assert db.migrate(path) == 2  # idempotent
+    c = sqlite3.connect(path)
+    rows = c.execute("SELECT slug, name, position, active FROM categories ORDER BY position").fetchall()
+    assert len(rows) == 10 and rows[-1] == ("saucisse", "Saucisse", 10, 1)
+
+
+def test_migration_2_respects_an_admin_created_saucisse(tmp_path):
+    import sqlite3
+    from app import db
+    path = tmp_path / "old.sqlite3"
+    saved = db.MIGRATIONS[:]
+    try:
+        db.MIGRATIONS[:] = saved[:1]
+        db.migrate(path)
+    finally:
+        db.MIGRATIONS[:] = saved
+    c = sqlite3.connect(path)
+    c.execute("INSERT INTO categories(slug, name, color, emoji, position, active, created_at)"
+              " VALUES ('saucisse', 'Saucisses', '#123456', '', 3, 0, 0)")
+    c.commit()
+    db.migrate(path)
+    assert c.execute("SELECT name, active FROM categories WHERE slug='saucisse'").fetchall() == [("Saucisses", 0)]
+
+
+def test_saucisse_is_playable_with_key_0(client, dishes, no_think):
+    html = client.get("/").text
+    assert 'value="saucisse"' in html and 'data-key="0"' in html and 'data-key="p"' in html
+    q = client.get("/api/question").json()["next"]
+    r = client.post("/api/vote", json={"token": q["token"], "choice": "saucisse"})
+    assert r.status_code == 200 and r.json()["same_pct"] == 100

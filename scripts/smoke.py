@@ -66,7 +66,7 @@ def main() -> int:
     print("health")
     status, health = s.json("/healthz")
     check(status == 200 and health.get("status") == "ok", f"/healthz ok ({health})")
-    check(health.get("categories", 0) >= 9, "9 active categories")
+    check(health.get("categories", 0) >= 10, "10 active categories")
     check(health.get("active_dishes", 0) >= args.min_dishes, f"≥ {args.min_dishes} active dishes")
 
     print("home + headers")

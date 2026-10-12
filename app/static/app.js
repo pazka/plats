@@ -318,7 +318,8 @@
       var t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
       if ($("question").hidden) return;
-      var btn = form.querySelector('button[data-key="' + e.key + '"]');
+      var key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      var btn = form.querySelector('button[data-key="' + key + '"]');
       if (!btn || btn.disabled) return;
       e.preventDefault();
       btn.focus();

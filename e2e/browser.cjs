@@ -77,7 +77,7 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
     const h = resp.headers();
     check(h["content-security-policy"] && h["content-security-policy"].includes("script-src 'self'"), "CSP header");
     check(h["x-frame-options"] === "DENY" && h["x-content-type-options"] === "nosniff", "frame/nosniff headers");
-    check((await play.locator(".cats button.cat").count()) === 9, "9 category buttons");
+    check((await play.locator(".cats button.cat").count()) === 10, "10 category buttons (incl. Saucisse)");
     check((await play.textContent("#dish-title")).trim().length > 0, "a dish is shown");
     const cookies = await play.context().cookies();
     const v = cookies.find((c) => c.name === "plats_v");
@@ -97,14 +97,14 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
     check(hue0 !== hue1, `theme hue drifted (${hue0} → ${hue1})`);
   });
 
-  await step("skip (key 0) is not a vote", async () => {
-    await answer(play, "0");
+  await step("skip (key P) is not a vote", async () => {
+    await answer(play, "p");
     check((await count(play)) === 1, "count still 1 after skip");
     check((await play.textContent("#result")).includes("Pas de souci"), "skip acknowledged");
   });
 
   await step("milestone at 5, persistence across reload", async () => {
-    for (let i = 0; i < 4; i++) await answer(play, String((i % 9) + 1));
+    for (let i = 0; i < 4; i++) await answer(play, "1234567890"[i % 10]);
     check((await count(play)) === 5, "count = 5 (keyboard answers)");
     check(await play.isVisible("#milestone"), "milestone overlay visible");
     check((await play.textContent("#milestone-title")).includes("Bien joué"), "« Bien joué ! » at 5");
@@ -114,10 +114,10 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
   });
 
   await step("SUPER ! at 25, GÉNIAL + badge at 30", async () => {
-    while ((await count(play)) < 25) await answer(play, String(((await count(play)) % 9) + 1));
+    while ((await count(play)) < 25) await answer(play, "1234567890"[(await count(play)) % 10]);
     check((await play.textContent("#milestone-title")).includes("SUPER"), "SUPER ! at 25");
     await shot(play, "02-super-25");
-    while ((await count(play)) < 30) await answer(play, String(((await count(play)) % 9) + 1));
+    while ((await count(play)) < 30) await answer(play, "1234567890"[(await count(play)) % 10]);
     check((await play.textContent("#milestone-title")).includes("GÉNIAL"), "GÉNIAL at 30");
     check((await play.textContent("#badge")).trim().length > 0, `badge shown (${(await play.textContent("#badge")).trim()})`);
     check((await play.getAttribute("html", "data-palette")) === "neon", "palette upgraded to néon");
@@ -377,7 +377,7 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
 
   await step("admin: categories", async () => {
     await admin.goto("/admin/categories");
-    check((await admin.locator("tbody tr").count()) === 9, "9 seeded categories");
+    check((await admin.locator("tbody tr").count()) === 10, "10 seeded categories");
     const withVotes = admin.locator("tbody tr", { hasText: "tarte" });
     check((await withVotes.locator("button[value=delete]").count()) === 0, "no delete button on a category with votes");
     const create = admin.locator("form:has(input[value=create])");

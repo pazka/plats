@@ -142,9 +142,23 @@ def _seed_v1(conn: sqlite3.Connection) -> None:
         )
 
 
+def _add_saucisse_v2(conn: sqlite3.Connection) -> None:
+    """Owner request after v0.1.1: a 10th category. Appended last; no-op if the admin already
+    created a category with this slug."""
+    if conn.execute("SELECT 1 FROM categories WHERE slug = 'saucisse'").fetchone():
+        return
+    position = conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM categories").fetchone()[0]
+    slug, name, color, emoji = seed_data.CATEGORY_SAUCISSE
+    conn.execute(
+        "INSERT INTO categories(slug, name, color, emoji, position, active, created_at) VALUES (?,?,?,?,?,1,?)",
+        (slug, name, color, emoji, position, int(time.time())),
+    )
+
+
 # Each migration: (version, sql, python hook or None). Never edit a released migration.
 MIGRATIONS = [
     (1, SCHEMA_V1, _seed_v1),
+    (2, "", _add_saucisse_v2),
 ]
 
 

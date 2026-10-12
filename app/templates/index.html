@@ -42,18 +42,18 @@
       <div class="cats" role="group" aria-label="Catégories">
       {% for c in categories %}
         <button type="submit" name="choice" value="{{ c.slug }}" class="cat cat-{{ c.slug }}"
-                data-key="{{ loop.index if loop.index < 10 else '' }}">
+                data-key="{{ loop.index if loop.index < 10 else (0 if loop.index == 10 else '') }}">
           <span class="emoji" aria-hidden="true">{{ c.emoji }}</span>
           <span class="label">{{ c.name }}</span>
-          {% if loop.index < 10 %}<kbd aria-hidden="true">{{ loop.index }}</kbd>{% endif %}
+          {% if loop.index <= 10 %}<kbd aria-hidden="true">{{ loop.index % 10 }}</kbd>{% endif %}
         </button>
       {% endfor %}
       </div>
-      <button type="submit" name="choice" value="skip" class="skip" data-key="0">
-        Je ne connais pas ce plat <kbd aria-hidden="true">0</kbd>
+      <button type="submit" name="choice" value="skip" class="skip" data-key="p">
+        Je ne connais pas ce plat <kbd aria-hidden="true">P</kbd>
       </button>
     </form>
-    <p class="hint">Astuce : touches <kbd>1</kbd>–<kbd>9</kbd> pour répondre, <kbd>0</kbd> pour passer.</p>
+    <p class="hint">Astuce : touches <kbd>1</kbd>–<kbd>{{ [categories|length, 10]|min % 10 }}</kbd> pour répondre, <kbd>P</kbd> pour passer.</p>
   </article>
 
   <section class="end" id="end"{% if question %} hidden{% endif %}>
