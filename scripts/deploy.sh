@@ -55,7 +55,7 @@ esac
 echo "admin TOTP secret: present"
 [ "$(var PLATS_COOKIE_SECURE)" = "0" ] && red "warning: PLATS_COOKIE_SECURE=0 — cookies will not be Secure (OK only for plain-http tests)"
 
-IMAGE="$(var PLATS_IMAGE)"; IMAGE="${IMAGE:-ghcr.io/pazka/plats:v0.2.2}"
+IMAGE="$(var PLATS_IMAGE)"; IMAGE="${IMAGE:-ghcr.io/pazka/plats:v0.2.3}"
 HOST="$(var PLATS_HOST)"; HOST="${HOST:-plats.hosh.it}"
 ENTRY="$(var TRAEFIK_ENTRYPOINT)"; ENTRY="${ENTRY:-websecure}"
 TAPI="$(var TRAEFIK_API)"

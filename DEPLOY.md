@@ -15,7 +15,7 @@ Box rules apply: an `ACTIONS-LOG.md` intent line BEFORE, result + revert AFTER; 
 ```sh
 sudo mkdir -p /srv/plats && sudo chmod 750 /srv/plats && cd /srv/plats
 [ -d .git ] || { sudo git init -q && sudo git remote add origin https://github.com/pazka/plats; }
-sudo git fetch -q --depth 1 origin tag v0.2.2 && sudo git checkout -q v0.2.2
+sudo git fetch -q --depth 1 origin tag v0.2.3 && sudo git checkout -q v0.2.3
 ```
 (Repository and image `ghcr.io/pazka/plats` are public: no credentials needed.)
 
@@ -80,7 +80,7 @@ One file feeds both docker compose (interpolation) and the container.
 
 | Variable | Default (= hosh.it box) | Notes |
 |---|---|---|
-| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.2` | pin a release tag |
+| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.3` | pin a release tag |
 | `PLATS_HOST` | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
 | `PLATS_ROUTING` | `file` | `file` = loopback port + Traefik file-provider route; `labels` = `docker-compose.labels.yml` (docker provider, Traefik ≥ v3.7) |
 | `PLATS_BIND` | `127.0.0.1:9131` | loopback `host:port` published for Traefik (file mode); must be loopback |
@@ -106,7 +106,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.2.2` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
+| Image | `ghcr.io/pazka/plats:v0.2.3` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
 | Process | uvicorn, 1 worker, port 8000 in the container, **published on `127.0.0.1:9131`** only |
 | Edge | `/root/hosh-deploy/edge/traefik/dynamic/plats.yml` (router `plats@file`, resolver `le`, HSTS middleware) |
 | User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |

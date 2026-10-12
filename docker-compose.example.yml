@@ -7,7 +7,7 @@
 # docker-compose.labels.yml instead (Traefik docker provider; needs Traefik >= v3.7 on the box).
 services:
   plats:
-    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.2}
+    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.3}
     container_name: plats
     restart: unless-stopped
     env_file: ${PLATS_ENV_FILE:-./plats.env}   # chmod 600; see .env.example
