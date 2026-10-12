@@ -1,0 +1,160 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "label",
+   "desc",
+   "img",
+   "article"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "cassoulet"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "plat traditionnel du Sud-Ouest de la France à base de haricots"
+    },
+    "img": {
+     "type": "uri",
+     "value": "http://commons.wikimedia.org/wiki/Special:FilePath/Cassoulet.jpg"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://fr.wikipedia.org/wiki/Cassoulet"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "quiche lorraine"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "tarte salée"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://fr.wikipedia.org/wiki/Quiche_lorraine"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "quiche lorraine"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "tarte salée"
+    },
+    "img": {
+     "type": "uri",
+     "value": "http://commons.wikimedia.org/wiki/Special:FilePath/Quiche.jpg"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://fr.wikipedia.org/wiki/Quiche_lorraine"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q3"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "bordeaux"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "vin français"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://fr.wikipedia.org/wiki/Bordeaux_(vin)"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "chartreuse"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "liqueur française"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q5"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "ratatouille"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q6"
+    },
+    "label": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "brie de Meaux"
+    },
+    "desc": {
+     "type": "literal",
+     "xml:lang": "fr",
+     "value": "fromage français à pâte molle et croûte fleurie"
+    },
+    "img": {
+     "type": "uri",
+     "value": "http://commons.wikimedia.org/wiki/Special:FilePath/Brie.jpg"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/L123"
+    },
+    "label": {
+     "type": "literal",
+     "value": "not an item"
+    }
+   }
+  ]
+ }
+}

@@ -78,8 +78,11 @@ def find_banned(text: str, banned) -> list[str]:
     norm = moderation_norm(text)
     if not norm:
         return []
-    padded = f" {norm} "
-    squashed = norm.replace(" ", "")
+    # Also join runs of single letters, so "p.u.t.e" or "p u t e" reads as "pute".
+    joined = re.sub(r"\b(?:[a-z0-9] )+[a-z0-9]\b", lambda m: m.group(0).replace(" ", ""), norm)
+    joined = _REPEATS.sub(r"\1", joined)
+    padded = f" {norm} {joined} "
+    squashed = _REPEATS.sub(r"\1", norm.replace(" ", ""))
     hits = []
     for word, word_norm, mode in banned:
         if not word_norm:
