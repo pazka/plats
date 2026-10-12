@@ -9,7 +9,7 @@
 #   keeping every other line. Nothing secret is printed to logs or passed on a command line.
 #
 # By default it runs the published image (no Python needed on the host), offline (--network none).
-#   PLATS_IMAGE=ghcr.io/pazka/plats:v0.2.0 scripts/set-admin.sh /srv/plats/plats.env
+#   PLATS_IMAGE=ghcr.io/pazka/plats:v0.2.1 scripts/set-admin.sh /srv/plats/plats.env
 #   PLATS_LOCAL=1 scripts/set-admin.sh      # use local python3 + requirements instead of Docker
 # Then restart the container so it picks up the new values.
 set -euo pipefail

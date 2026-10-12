@@ -3,7 +3,7 @@
 #   docker compose --env-file plats.env up -d          (scripts/deploy.sh does this for you)
 services:
   plats:
-    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.0}
+    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.2.1}
     container_name: plats
     restart: unless-stopped
     env_file: ${PLATS_ENV_FILE:-./plats.env}   # chmod 600; see .env.example
