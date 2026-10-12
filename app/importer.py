@@ -52,6 +52,11 @@ DRINK_WORDS = {
     "calvados", "pastis", "cepage", "appellation", "vignoble", "domaine", "cuvee", "marc", "rhum",
     "brandy", "digestif", "sirop", "soda", "limonade", "the", "tisane", "infusion", "cafe",
 }
+# Obvious non-dishes found in the live data: brands, companies, plant cultivars, animal breeds.
+NON_DISH_WORDS = {
+    "marque", "marques", "entreprise", "societe", "restaurant", "enseigne", "chaine", "fabricant",
+    "cultivar", "race", "ustensile", "appareil", "cooperative", "label",
+}
 LEADING_FILLERS = {"un", "une", "le", "la", "les", "l", "des", "du", "de", "d", "type", "sorte",
                    "variete", "francais", "francaise", "aoc", "aop", "igp"}
 
@@ -83,9 +88,23 @@ def _sparql(client: httpx.Client, query: str) -> list[dict]:
     return resp.json()["results"]["bindings"]
 
 
-def looks_like_drink(description: str) -> bool:
+def _head_word(description: str) -> str:
     words = [w for w in basic_norm(description).split() if w not in LEADING_FILLERS]
-    return bool(words) and words[0] in DRINK_WORDS
+    return words[0] if words else ""
+
+
+def looks_like_drink(description: str) -> bool:
+    return _head_word(description) in DRINK_WORDS
+
+
+def looks_like_non_dish(description: str) -> bool:
+    return _head_word(description) in NON_DISH_WORDS
+
+
+def clean_title(label: str) -> str:
+    """Wikidata French labels are lower-case and sometimes disambiguated: "liaison (cuisine)"."""
+    title = re.sub(r"\s*\([^)]*\)\s*$", "", label.strip()) or label.strip()
+    return (title[0].upper() + title[1:])[:120] if title else title
 
 
 def group_items(bindings: list[dict]) -> dict[str, dict]:
@@ -111,14 +130,36 @@ def _first_sentences(text: str, limit: int = MAX_DESCRIPTION) -> str:
     return cut[: end + 1] if end > 80 else cut.rsplit(" ", 1)[0] + "…"
 
 
-def _wiki_summary(client: httpx.Client, article_url: str) -> str:
+_sleep = time.sleep  # replaced in tests
+ENRICH_PAUSE = 0.05   # be gentle with the Wikimedia REST API (serial, ~20 req/s at most)
+
+
+def _wiki_summary(client: httpx.Client, article_url: str) -> tuple[str, str]:
+    """Returns (extract, outcome) where outcome is an HTTP status or an error name, for the summary."""
     title = unquote(article_url.rsplit("/wiki/", 1)[-1]) if "/wiki/" in article_url else ""
     if not title:
-        return ""
-    resp = client.get(FRWIKI_SUMMARY + quote(title.replace(" ", "_"), safe=""))
-    if resp.status_code != 200:
-        return ""
-    return _first_sentences(resp.json().get("extract", ""))
+        return "", "no_title"
+    url = FRWIKI_SUMMARY + quote(title.replace(" ", "_"), safe="")
+    for attempt in range(4):
+        _sleep(ENRICH_PAUSE)
+        try:
+            resp = client.get(url)
+        except httpx.HTTPError as exc:
+            return "", type(exc).__name__
+        if resp.status_code in (429, 503) and attempt < 3:
+            try:
+                wait = min(30.0, float(resp.headers.get("retry-after", "")))
+            except ValueError:
+                wait = 2.0 * (attempt + 1)
+            _sleep(wait)
+            continue
+        if resp.status_code != 200:
+            return "", str(resp.status_code)
+        try:
+            return _first_sentences(resp.json().get("extract", "")), "200"
+        except ValueError:
+            return "", "bad_json"
+    return "", "429"
 
 
 def _strip_html(value: str) -> str:
@@ -163,7 +204,7 @@ def _fetch_image(client: httpx.Client, images_dir: Path, qid: str, commons_url: 
 def run_import(conn, *, client: httpx.Client, images_dir: Path, enrich: bool = True,
                images: bool = False, progress=None) -> dict:
     summary = {"fetched": 0, "created": 0, "updated": 0, "unchanged": 0, "drinks_skipped": 0,
-               "enriched": 0, "images": 0}
+               "non_dishes_skipped": 0, "enriched": 0, "images": 0, "enrich_http": {}}
     items = group_items(_sparql(client, DISHES_QUERY))
     drinks = {q for q in (_qid(b.get("item", {}).get("value", "")) for b in _sparql(client, DRINKS_QUERY)) if q}
     summary["fetched"] = len(items)
@@ -174,19 +215,24 @@ def run_import(conn, *, client: httpx.Client, images_dir: Path, enrich: bool = T
         if it["qid"] in drinks or looks_like_drink(it["desc"]):
             summary["drinks_skipped"] += 1
             continue
+        if looks_like_non_dish(it["desc"]):
+            summary["non_dishes_skipped"] += 1
+            continue
+        title = clean_title(it["label"])
         existing = conn.execute("SELECT * FROM dishes WHERE qid = ?", (it["qid"],)).fetchone()
         desc = it["desc"][:MAX_DESCRIPTION]
         if desc:
             desc = desc[0].upper() + desc[1:]
         if enrich and it["article"] and len(desc) < MIN_DESCRIPTION and (
                 existing is None or not existing["admin_edited"]):
-            try:
-                extract = _wiki_summary(client, it["article"])
-            except httpx.HTTPError:
-                extract = ""
+            extract, outcome = _wiki_summary(client, it["article"])
+            summary["enrich_http"][outcome] = summary["enrich_http"].get(outcome, 0) + 1
             if len(extract) > len(desc):
                 desc = extract
                 summary["enriched"] += 1
+        if (existing is not None and len(desc) < MIN_DESCRIPTION
+                and len(existing["description"]) > len(desc)):
+            desc = existing["description"]  # never downgrade (e.g. an earlier enrichment)
         image = None
         if images and it["img"] and (existing is None or not existing["image_path"]):
             try:
@@ -197,7 +243,7 @@ def run_import(conn, *, client: httpx.Client, images_dir: Path, enrich: bool = T
                 summary["images"] += 1
         with db.Tx(conn):
             if existing is None:
-                dish_id = services.create_dish(conn, title=it["label"][:120], description=desc,
+                dish_id = services.create_dish(conn, title=title, description=desc,
                                                source="wikidata", qid=it["qid"], wiki_url=it["article"])
                 if image:
                     _set_image(conn, dish_id, image)
@@ -205,13 +251,13 @@ def run_import(conn, *, client: httpx.Client, images_dir: Path, enrich: bool = T
                 continue
             changed = False
             if not existing["admin_edited"] and (
-                    existing["title"] != it["label"][:120] or existing["description"] != desc
+                    existing["title"] != title or existing["description"] != desc
                     or existing["wiki_url"] != it["article"]):
                 # Status is never touched: a dish the admin hid stays hidden.
                 conn.execute(
                     "UPDATE dishes SET title = ?, title_norm = ?, description = ?, wiki_url = ?, updated_at = ?"
                     " WHERE id = ?",
-                    (it["label"][:120], title_norm(it["label"]), desc, it["article"], now, existing["id"]),
+                    (title, title_norm(title), desc, it["article"], now, existing["id"]),
                 )
                 changed = True
             if image:

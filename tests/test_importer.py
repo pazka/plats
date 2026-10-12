@@ -7,6 +7,8 @@ import pytest
 
 from app import importer
 
+importer._sleep = lambda s: None  # no real pauses in tests
+
 FIX = Path(__file__).parent / "fixtures"
 PNG = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
 
@@ -58,7 +60,7 @@ def test_first_import(conn, tmp_path):
     assert s["fetched"] == 6 and s["created"] == 4 and s["drinks_skipped"] == 2 and s["enriched"] == 1
     assert dish(conn, "Q3") is None and dish(conn, "Q4") is None  # wine, liqueur
     q = dish(conn, "Q2")
-    assert q["title"] == "quiche lorraine" and q["description"].startswith("La quiche lorraine est une tarte")
+    assert q["title"] == "Quiche lorraine" and q["description"].startswith("La quiche lorraine est une tarte")
     assert q["source"] == "wikidata" and q["wiki_url"] == "https://fr.wikipedia.org/wiki/Quiche_lorraine"
     assert dish(conn, "Q1")["description"].startswith("Plat traditionnel")
     assert dish(conn, "Q5")["description"] == ""
@@ -87,7 +89,7 @@ def test_reimport_updates_but_never_resurrects_hidden(conn, tmp_path):
     s = run(conn, tmp_path, [], enrich=False, images=False, payload=payload)
     assert s["created"] == 0 and s["updated"] == 1
     q1 = dish(conn, "Q1")
-    assert q1["title"] == "cassoulet de Castelnaudary" and q1["status"] == "hidden"
+    assert q1["title"] == "Cassoulet de Castelnaudary" and q1["status"] == "hidden"
     assert dish(conn, "Q5")["title"] == "Ratatouille niçoise"  # admin edit preserved
 
 
@@ -122,3 +124,52 @@ def test_import_failure_is_reported(app, conn):
     with pytest.raises(httpx.HTTPStatusError):
         importer.run_logged(settings.db_path, settings.images_dir, enrich=False, images=False, client=client)
     assert importer.import_status(conn)["state"] == "error"
+
+
+def test_titles_are_capitalised_and_disambiguation_stripped():
+    assert importer.clean_title("coq au vin") == "Coq au vin"
+    assert importer.clean_title("œuf poché") == "Œuf poché"
+    assert importer.clean_title("liaison (cuisine)") == "Liaison"
+    assert importer.clean_title("Bleu des Causses") == "Bleu des Causses"
+
+
+def test_non_dishes_are_skipped(conn, tmp_path):
+    payload = json.loads((FIX / "wikidata_dishes.json").read_text())
+    def add(qid, label, desc):
+        payload["results"]["bindings"].append({
+            "item": {"value": f"http://www.wikidata.org/entity/{qid}"}, "label": {"value": label},
+            "desc": {"value": desc}})
+    add("Q90", "Clon", "Marque commerciale française de fromages")
+    add("Q91", "Verdale des Pyrénées-Orientales", "Cultivar d'olivier originaire de la France")
+    add("Q92", "Montbéliarde", "Race bovine française")
+    s = run(conn, tmp_path, [], enrich=False, images=False, payload=payload)
+    assert s["non_dishes_skipped"] == 3
+    assert dish(conn, "Q90") is None and dish(conn, "Q92") is None
+    assert importer.looks_like_non_dish("Marque de fromage") and not importer.looks_like_non_dish("Fromage français")
+
+
+def test_rerun_without_enrichment_keeps_enriched_description(conn, tmp_path):
+    run(conn, tmp_path, [], enrich=True, images=False)
+    enriched = dish(conn, "Q2")["description"]
+    assert enriched.startswith("La quiche lorraine est une tarte")
+    s = run(conn, tmp_path, [], enrich=False, images=False)
+    assert s["updated"] == 0
+    assert dish(conn, "Q2")["description"] == enriched
+
+
+def test_enrichment_backs_off_on_429_and_reports_statuses(conn, tmp_path):
+    calls = []
+    base = handler_factory(calls)
+    state = {"n": 0}
+
+    def flaky(request):
+        if request.url.host == "fr.wikipedia.org" and state["n"] == 0:
+            state["n"] += 1
+            return httpx.Response(429, headers={"retry-after": "1"}, json={})
+        return base(request)
+
+    client = importer.make_client(httpx.MockTransport(flaky))
+    with client:
+        s = importer.run_import(conn, client=client, images_dir=tmp_path / "img", enrich=True, images=False)
+    assert s["enriched"] == 1 and s["enrich_http"].get("200") == 1
+    assert sum(1 for r in calls if r.url.host == "fr.wikipedia.org") >= 1
