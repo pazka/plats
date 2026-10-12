@@ -39,14 +39,12 @@ def get_conn(request: Request):
         conn.close()
 
 
-def rate_ok(request: Request, conn, action: str, extra_keys: tuple[str, ...] = ()) -> bool:
-    """Apply the admin-tunable rule set `rl_<action>` per visitor AND per IP hash."""
-    rules = parse_rules(db.get_setting(conn, f"rl_{action}"))
-    keys = [f"{action}:ip:{request.state.ip_hash}"]
+def rate_ok(request: Request, conn, action: str) -> bool:
+    """Apply the admin-tunable rules `rl_<action>` per visitor and `rl_<action>_ip` per IP hash."""
+    checks = [(f"{action}:ip:{request.state.ip_hash}", parse_rules(db.get_setting(conn, f"rl_{action}_ip")))]
     if getattr(request.state, "visitor_id", None):
-        keys.append(f"{action}:v:{request.state.visitor_id}")
-    keys.extend(f"{action}:{k}" for k in extra_keys)
-    ok = request.app.state.limiter.hit(keys, rules)
+        checks.append((f"{action}:v:{request.state.visitor_id}", parse_rules(db.get_setting(conn, f"rl_{action}"))))
+    ok = request.app.state.limiter.hit_many(checks)
     if not ok:
         security_event(request, "rate_limited", action=action)
     return ok

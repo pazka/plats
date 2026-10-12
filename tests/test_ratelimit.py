@@ -70,3 +70,25 @@ def test_similar_check_rate_limited(client, conn, dishes):
     db.set_setting(conn, "rl_similar", "2/1m")
     codes = [client.get("/api/similaires?nom=quiche").status_code for _ in range(3)]
     assert codes == [200, 200, 429]
+
+
+def test_per_ip_limit_is_separate_and_looser(app, conn, dishes):
+    """Visitors sharing one IP (NAT) don't block each other at the per-visitor rate,
+    but the per-IP ceiling still applies across them."""
+    from app import db
+    from tests.conftest import make_client
+    db.set_setting(conn, "rl_similar", "2/1m")
+    db.set_setting(conn, "rl_similar_ip", "5/1m")
+    a, b, c = make_client(app), make_client(app), make_client(app)
+    assert [a.get("/api/similaires?nom=x").status_code for _ in range(3)] == [200, 200, 429]
+    assert [b.get("/api/similaires?nom=x").status_code for _ in range(2)] == [200, 200]
+    assert c.get("/api/similaires?nom=x").status_code == 200   # 5th hit from this IP
+    assert c.get("/api/similaires?nom=x").status_code == 429   # IP ceiling reached
+
+
+def test_hit_many_rules_per_key():
+    clock = Clock()
+    rl = RateLimiter(clock)
+    assert rl.hit_many([("ip", [(10, 60)]), ("v", [(1, 60)])])
+    assert not rl.hit_many([("ip", [(10, 60)]), ("v", [(1, 60)])])
+    assert rl.hit_many([("ip", [(10, 60)]), ("v2", [(1, 60)])])

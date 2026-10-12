@@ -38,23 +38,27 @@ class RateLimiter:
     def hit(self, keys: list[str], rules: list[tuple[int, int]]) -> bool:
         """Record one event for every key if all keys are under every rule.
         Returns False (and records nothing) when any limit would be exceeded."""
-        if not rules:
+        return self.hit_many([(key, rules) for key in keys])
+
+    def hit_many(self, checks: list[tuple[str, list[tuple[int, int]]]]) -> bool:
+        """Like hit(), with a rule set per key (e.g. per-visitor vs looser per-IP limits)."""
+        checks = [(key, rules) for key, rules in checks if rules]
+        if not checks:
             return True
         now = self._clock()
-        longest = max(window for _, window in rules)
         with self._lock:
             self._maybe_prune(now)
-            for key in keys:
+            for key, rules in checks:
                 q = self._hits.get(key)
                 if q is None:
                     continue
+                longest = max(window for _, window in rules)
                 while q and now - q[0] > longest:
                     q.popleft()
                 for count, window in rules:
-                    recent = sum(1 for t in q if now - t < window) if len(q) >= count else 0
-                    if recent >= count:
+                    if len(q) >= count and sum(1 for t in q if now - t < window) >= count:
                         return False
-            for key in keys:
+            for key, _ in checks:
                 self._hits.setdefault(key, deque()).append(now)
             return True
 

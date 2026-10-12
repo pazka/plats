@@ -7,7 +7,7 @@
   <label class="check"><input type="checkbox" name="require_approval" value="1"{% if require_approval %} checked{% endif %}>
     Toute proposition doit être approuvée avant d'apparaître (<code>require_approval</code>)</label>
   <p class="muted">Limites : « nombre/fenêtre » séparés par des virgules, fenêtre en s, m, h ou d (ex. <code>5/1h,20/1d</code>).
-    Elles s'appliquent séparément par visiteur ET par empreinte IP.</p>
+    Chaque action a une limite par visiteur (cookie) et une limite par empreinte IP, plus large car plusieurs personnes peuvent partager une IP.</p>
   {% for key, label, kind in fields %}
   <label>{{ label }} <code>{{ key }}</code>
     <input name="{{ key }}" value="{{ values[key] }}"{% if kind != 'intblank' %} required{% endif %}></label>

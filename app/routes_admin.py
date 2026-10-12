@@ -522,10 +522,14 @@ async def words_action(request: Request, deps=Depends(admin_form)):
 # ------------------------------------------------------------------ settings
 
 SETTING_FIELDS = [
-    ("rl_vote", "Réponses (visiteur et IP)", "rules"),
-    ("rl_question", "Questions servies via l'API", "rules"),
-    ("rl_submit", "Propositions de plats", "rules"),
-    ("rl_similar", "Vérification « plats similaires »", "rules"),
+    ("rl_vote", "Réponses, par visiteur", "rules"),
+    ("rl_vote_ip", "Réponses, par empreinte IP", "rules"),
+    ("rl_question", "Questions servies via l'API, par visiteur", "rules"),
+    ("rl_question_ip", "Questions servies via l'API, par empreinte IP", "rules"),
+    ("rl_submit", "Propositions de plats, par visiteur", "rules"),
+    ("rl_submit_ip", "Propositions de plats, par empreinte IP", "rules"),
+    ("rl_similar", "Vérification « plats similaires », par visiteur", "rules"),
+    ("rl_similar_ip", "Vérification « plats similaires », par empreinte IP", "rules"),
     ("rl_login", "Échecs de connexion admin avant blocage (1re règle)", "rules"),
     ("min_think_ms", "Temps de réflexion minimum (ms)", "int"),
     ("min_fill_seconds", "Temps de remplissage minimum du formulaire (s)", "int"),

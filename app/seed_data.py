@@ -18,10 +18,16 @@ CATEGORIES = [
 DEFAULT_SETTINGS = {
     "require_approval": "0",
     # "count/window" pairs, comma separated; window suffix s, m, h or d.
+    # Per visitor (cookie). The per-IP variants (*_ip) are looser: many people can share an IP
+    # (office, school, mobile carrier NAT).
     "rl_vote": "3/3s,300/1h",
+    "rl_vote_ip": "30/3s,3000/1h",
     "rl_submit": "5/1h,20/1d",
+    "rl_submit_ip": "20/1h,60/1d",
     "rl_similar": "30/1m",
+    "rl_similar_ip": "300/1m",
     "rl_question": "120/1m",
+    "rl_question_ip": "1200/1m",
     "rl_login": "5/15m",
     "min_think_ms": "600",
     "min_fill_seconds": "3",

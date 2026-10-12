@@ -117,7 +117,8 @@ def test_logout(admin):
 def test_settings_update_and_audit(admin, conn):
     token = csrf(admin, "/admin/reglages")
     data = {"csrf": token, "require_approval": "1", "rl_vote": "3/3s,300/1h", "rl_question": "120/1m",
-            "rl_submit": "5/1h,20/1d", "rl_similar": "30/1m", "rl_login": "5/15m", "min_think_ms": "600",
+            "rl_submit": "5/1h,20/1d", "rl_similar": "30/1m", "rl_vote_ip": "30/3s,3000/1h",
+            "rl_question_ip": "1200/1m", "rl_submit_ip": "20/1h,60/1d", "rl_similar_ip": "300/1m", "rl_login": "5/15m", "min_think_ms": "600",
             "min_fill_seconds": "3", "pow_difficulty": "", "anomaly_votes_per_hour": "200",
             "anomaly_visitors_per_ip": "15"}
     r = admin.post("/admin/reglages", data=data, follow_redirects=False)
