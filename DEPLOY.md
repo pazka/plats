@@ -1,115 +1,112 @@
 # Deploying plats.hosh.it
 
-Everything the server needs. The cloud builder had no access to the box; this file is the
-hand-off for the on-box session.
+Hand-off for the on-box session. Split of work: **the owner prepares `plats.env`** (variables and
+admin credentials, which never pass through a chat); **the on-box Claude runs the commands below and
+nothing else.** Everything here was rehearsed on a simulated box (real Traefik, HTTPS, `deploy.sh`,
+then the full browser suite through Traefik — see §6).
 
-## 1. What runs
+## 1. On-box runbook
+
+### Step A — Claude: get the release (any directory; `/srv/plats` below)
+```sh
+mkdir -p /srv/plats && cd /srv/plats
+if [ ! -d .git ]; then git init -q && git remote add origin https://github.com/pazka/plats; fi
+git fetch -q --depth 1 origin tag v0.1.1 && git checkout -q v0.1.1
+```
+(The repository and the image `ghcr.io/pazka/plats` are public: no credentials needed. Works even if
+`plats.env` was already put in the directory.)
+
+### Step B — owner: prepare `plats.env` (Claude must not read or print it)
+```sh
+cd /srv/plats
+install -m 600 .env.example plats.env      # then edit: PLATS_HOST, TRAEFIK_* (see §2)
+bash scripts/set-admin.sh ./plats.env      # interactive: password ×2, scan the QR, type one code
+```
+
+### Step C — Claude: deploy, verify, report
+```sh
+cd /srv/plats && scripts/deploy.sh
+```
+`deploy.sh` is idempotent and never prints secrets. It does, and stops with an explicit message at
+the first problem:
+1. **preflight** — docker + compose v2; `plats.env` exists (forces mode 600); the admin hash
+   (argon2id) and TOTP secret are present (checked, not printed); the Traefik network exists
+   (lists the host's networks if not); compose config valid;
+2. **pull + up** (`docker compose --env-file plats.env`, service `plats`);
+3. **wait healthy**, then checks uid 10001 and the read-only root filesystem;
+4. **Wikidata import** if the catalogue has < 100 dishes (a few minutes; expects ≥ 500 dishes);
+5. **smoke checks** inside the container, then **through Traefik** at `https://$PLATS_HOST`
+   (+ HSTS header check);
+6. **log report** of the last 15 minutes (errors, 5xx, security events).
+
+Options: `--no-import`, `--images` (also download Commons thumbnails), `--skip-external`,
+`--env-file FILE`. Exit code 0 = deployed and verified.
+
+### Step D — Claude: watch the logs after going live
+```sh
+scripts/logs.sh follow        # live alerts (errors, 5xx, lockouts, CSRF failures, rate-limit bursts)
+                              # + a summary every 5 min; Ctrl-C to stop
+scripts/logs.sh report 24h    # one-shot summary
+scripts/logs.sh check 1h      # same, exit 1 on any error/5xx (cron-able)
+```
+Then the owner, by hand (2 minutes): play 5 dishes on a phone, log into `/admin` with the TOTP,
+download the export once.
+
+If something fails: `docker compose --env-file plats.env logs --tail 100 plats`, fix the variable
+that the error names, re-run `scripts/deploy.sh`.
+
+## 2. Variables (`plats.env`, mode 600 — template `.env.example`)
+
+One file feeds both docker compose (interpolation) and the container.
+
+| Variable | Who | Default | Notes |
+|---|---|---|---|
+| `PLATS_IMAGE` | owner | `ghcr.io/pazka/plats:v0.1.1` | pin a release tag |
+| `PLATS_HOST` | owner | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
+| `TRAEFIK_NETWORK` | owner | `traefik` | docker network Traefik is attached to (`docker network ls`) |
+| `TRAEFIK_ENTRYPOINT` | owner | `websecure` | Traefik's HTTPS entrypoint name |
+| `TRAEFIK_CERTRESOLVER` | owner | `letsencrypt` | ACME resolver name; **empty** = no resolver (file/wildcard certificate) |
+| `PLATS_ADMIN_PASSWORD_HASH` | `set-admin.sh` | — | argon2id; empty ⇒ admin login disabled |
+| `PLATS_ADMIN_TOTP_SECRET` | `set-admin.sh` | — | base32 |
+| `PLATS_SECRET_KEY` | optional | generated in `/data/.secrets/` | signs cookies/tokens; changing it resets every visitor |
+| `PLATS_IP_SALT` | optional | generated in `/data/.secrets/` | HMAC key of IP hashes |
+| `PLATS_TRUSTED_PROXIES` | optional | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | `X-Forwarded-For` honoured only from these peers (Traefik) |
+| `PLATS_COOKIE_SECURE` | optional | `1` | keep 1 behind HTTPS |
+| `PLATS_CONTACT` | optional | GitHub link | shown on `/a-propos` |
+| `PLATS_POW_DIFFICULTY` | optional | `16` | proposal proof-of-work bits (≈1 s on a phone) |
+| `PLATS_LOG_CLIENT_IP` | optional | `0` | 1 = raw IP in stdout security lines (never in the DB) |
+
+Single-quoted values are literal for compose (the `$` of the argon2 hash is safe); the app also
+strips quotes itself if the file is used with `docker run --env-file`.
+
+## 3. What runs
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.1.0` (also `:latest`, `:0.1`; every `main` commit: `:ci`, `:<sha>`) |
-| Process | `uvicorn --factory app.main:run`, 1 worker, listens on **port 8000** (HTTP, behind Traefik) |
-| User | uid/gid **10001**, read-only rootfs OK, needs a writable `/tmp` (tmpfs) and `/data` |
-| Volume | **`/data`** — `plats.sqlite3` (+ `-wal`/`-shm`), `images/` (optional Commons thumbnails), `.secrets/` (generated keys) |
-| Health | **`GET /healthz`** → `{"status":"ok","schema":1,"active_dishes":N,"categories":9}` (also the Docker `HEALTHCHECK`) |
-| Migrations | applied automatically at start (`PRAGMA user_version`), or `python -m app.cli migrate` |
-| Logs | JSON lines on stdout (`event: http`, `vote_rejected`, `rate_limited`, `honeypot`, `admin_login_failed`, …) |
-| Outbound network | none at runtime; **only the Wikidata importer** calls `query.wikidata.org`, `fr.wikipedia.org` (and `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
+| Image | `ghcr.io/pazka/plats:v0.1.1` (`:latest`, `:0.1`; each `main` commit: `:ci`, `:<sha>`) |
+| Process | uvicorn, 1 worker, **port 8000** (HTTP behind Traefik, not published) |
+| User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |
+| Volume | **`/data`**: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional) |
+| Health | **`GET /healthz`** → `{"status":"ok","schema":1,"active_dishes":N,"categories":9}` (Docker healthcheck too); `HEAD` supported |
+| Migrations | automatic at start |
+| Logs | JSON lines on stdout, `ip_hash` only (no raw IP) |
+| Outbound | only the importer: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
 
-`docker-compose.example.yml` is the reference deployment (Traefik labels, `read_only`,
-`tmpfs /tmp`, `cap_drop: [ALL]`, `no-new-privileges`, healthcheck, no published port).
+## 4. Operations
 
-## 2. Environment variables (`plats.env`, mode 600 — template: `.env.example`)
+- **Re-import / update the catalogue**: `docker compose --env-file plats.env exec plats python scripts/import_wikidata.py`
+  or Admin → Plats → « Lancer l'import ». Idempotent; never un-hides a dish.
+- **Backup**: `docker compose --env-file plats.env exec plats python -c "import sqlite3; sqlite3.connect('/data/plats.sqlite3').backup(sqlite3.connect('/data/backup.sqlite3'))"`
+  then copy `/data/backup.sqlite3` and `/data/.secrets/` off the box. Admin → Export .xlsx too.
+- **Upgrade**: set `PLATS_IMAGE` to the new tag, `scripts/deploy.sh`.
+- **Admin password / TOTP reset**: owner runs `scripts/set-admin.sh plats.env`, then `scripts/deploy.sh`.
+- **Tuning** (no restart): Admin → Réglages (rate limits, approval, PoW, anomaly thresholds).
+- **Abuse**: Admin → Tableau de bord (anomalies) → Réponses → bulk delete by visitor / IP hash.
 
-| Variable | Required | Default | Notes |
-|---|---|---|---|
-| `PLATS_ADMIN_PASSWORD_HASH` | yes (for /admin) | — | argon2id hash. **Written by `scripts/set-admin.sh`**, never by hand. Empty ⇒ admin login disabled. |
-| `PLATS_ADMIN_TOTP_SECRET` | yes (for /admin) | — | base32 TOTP secret. **Written by `scripts/set-admin.sh`**. |
-| `PLATS_SECRET_KEY` | no | generated in `/data/.secrets/secret_key` | signs visitor cookies, vote/form tokens. Changing it resets every visitor. |
-| `PLATS_IP_SALT` | no | generated in `/data/.secrets/ip_salt` | HMAC key for IP hashes. Changing it breaks IP-hash continuity. |
-| `PLATS_TRUSTED_PROXIES` | no | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | `X-Forwarded-For` is only honoured when the TCP peer is in these CIDRs. Narrow it to Traefik's docker network if you like (e.g. `172.18.0.0/16`). |
-| `PLATS_COOKIE_SECURE` | no | `1` | keep `1` in production (HTTPS via Traefik). `0` only for plain-http local tests. |
-| `PLATS_BASE_URL` | no | `https://plats.hosh.it` | |
-| `PLATS_CONTACT` | no | (GitHub repo link) | shown on `/a-propos`. |
-| `PLATS_POW_DIFFICULTY` | no | `16` | proposal proof-of-work bits (≈1 s on a phone); overridable in /admin → Réglages. |
-| `PLATS_LOG_CLIENT_IP` | no | `0` | `1` adds the raw client IP to stdout security lines (never to the DB) — e.g. if CrowdSec should parse app logs. |
-| `PLATS_DATA_DIR` | no | `/data` (set in the image) | |
+## 5. Decisions (where the brief was silent) — open to change
 
-Compose reads single-quoted values literally, so the `$` signs in the argon2 hash are safe. If
-the file is passed to `docker run --env-file` instead, the app strips the quotes itself.
-
-## 3. First run (on the server)
-
-```sh
-mkdir -p /srv/plats && cd /srv/plats
-# deployment files from the release tag
-for f in docker-compose.example.yml scripts/set-admin.sh scripts/smoke.py .env.example; do
-  curl -fsSL "https://raw.githubusercontent.com/pazka/plats/v0.1.0/$f" -o "$(basename "$f")"
-done
-cp docker-compose.example.yml docker-compose.yml     # adjust Traefik network/entrypoint/certresolver names
-install -m 600 .env.example plats.env                # optional values; admin values come next
-
-# 1) admin password + TOTP — interactive, run by the owner in a real terminal
-PLATS_IMAGE=ghcr.io/pazka/plats:v0.1.0 bash set-admin.sh ./plats.env
-#    → asks the password twice, shows a QR code to scan, asks one 6-digit code, writes plats.env
-
-# 2) start
-docker compose pull && docker compose up -d
-docker compose ps                                     # wait for "healthy"
-
-# 3) import the catalogue from Wikidata (CC0) — idempotent, safe to re-run
-docker compose exec plats python scripts/import_wikidata.py
-#    options: --images (download Commons thumbnails with licence), --no-enrich (skip frwiki summaries)
-#    same thing as the "Lancer l'import" button in /admin/plats. Expect ≈1 000 dishes, a few minutes.
-```
-
-If `docker compose pull` is denied, the GHCR package is private: either make it public
-(GitHub → Packages → plats → Package settings → visibility) or `docker login ghcr.io` with a
-token that has `read:packages`.
-
-Re-running `set-admin.sh` resets the password/TOTP (then `docker compose up -d` to apply).
-
-## 4. Smoke checks (prove full capability, not just a 200)
-
-```sh
-# inside the container (plain http to itself)
-docker compose exec plats python scripts/smoke.py http://127.0.0.1:8000 --min-dishes 900
-# from outside, through Traefik/TLS
-python3 smoke.py https://plats.hosh.it --min-dishes 900
-```
-
-`smoke.py` checks: health + 9 categories + catalogue size; CSP/nosniff headers; HttpOnly visitor
-cookie; question served with a signed token; an answer **before** the 600 ms think time is refused;
-an answer is recorded (a single *skip*, not a real vote) and returns the distribution; the same token
-is refused on replay (single-use); dish page, search, stats, proposal form (token + PoW + honeypot),
-look-alike API, admin login page; export not public; static assets local; no external
-script/style/image on any page. Exit code 0 = all good.
-
-Then by hand (2 minutes):
-
-1. `curl -sI https://plats.hosh.it/ | grep -iE 'strict-transport|content-security'` → HSTS (Traefik) and CSP present.
-2. Open https://plats.hosh.it on a phone: answer 5 dishes (burst + "Bien joué !"), keys 1–9 work on desktop.
-3. https://plats.hosh.it/admin → password + TOTP → dashboard shows the counts, "Dernier import" summary.
-4. Admin → Export .xlsx downloads and opens (6 sheets).
-5. Admin → Réponses: find your test answers (filter by date) and delete them if you want a clean start.
-6. `docker compose logs plats | tail` → JSON lines, no raw IPs (only `ip_hash`).
-7. Wrong admin password 5× → "Trop d'échecs" lockout (15 min), visible in Admin → Journal afterwards.
-
-## 5. Operations
-
-- **Backup** (online, consistent):
-  `docker compose exec plats python -c "import sqlite3; sqlite3.connect('/data/plats.sqlite3').backup(sqlite3.connect('/data/backup.sqlite3'))"`
-  then copy `/data/backup.sqlite3` (and `/data/.secrets/`) off the box. Also: Admin → Export .xlsx.
-- **Upgrade**: change the tag in `docker-compose.yml`, `docker compose pull && docker compose up -d`;
-  migrations run on start.
-- **Rate limits / approval / PoW / anomaly thresholds**: Admin → Réglages (no restart needed).
-- **Abuse**: Admin → Tableau de bord lists anomalous visitors / IP hashes; Admin → Réponses deletes
-  by visitor or IP hash in bulk. The rate limiter is in memory (reset on restart).
-
-## 6. Decisions (where the brief was silent)
-
-1. **One process, one worker.** Rate limits are an in-memory sliding window (per visitor AND per IP
-   hash), which is correct only with a single worker; they reset on restart. Login lockout is
+1. **One process, one worker.** Rate limits are an in-memory sliding window, checked per visitor
+   AND per IP hash, which is correct only with a single worker; they reset on restart. Login lockout is
    stored in SQLite and survives restarts.
 2. **Selection weight** = `1 / (1 + votes)²` over active dishes the visitor hasn't answered or
    skipped. A visitor never gets their own submission during the hour after submitting it.
@@ -168,18 +165,44 @@ Then by hand (2 minutes):
     generated `/categories.css`, bar widths are set from `data-` attributes by the local JS.
 20. **CI**: Trivy runs from its image pinned by digest (`aquasec/trivy:0.75.0`) rather than through
     `aquasecurity/trivy-action`; gate = CRITICAL with `--ignore-unfixed`. CI also boots the built
-    image read-only, non-root, without capabilities, and runs `scripts/smoke.py` inside it.
+    image read-only, non-root, without capabilities, runs `scripts/smoke.py` inside it, then the
+    Chromium e2e suite. Releases can be cut from the Actions tab (`release` → version) because the
+    build sandbox could not push git tags; pushing a `v*` tag works the same.
     The owner's other repos (e.g. DrawTogether) were not readable from this session, so the
     workflows follow the brief rather than copying them.
 21. **Dates/timezone**: timestamps stored as UTC epoch seconds; admin shows UTC.
-22. **Rate-limit defaults**: votes `3/3s,300/1h`, questions via API `120/1m`, submissions
-    `5/1h,20/1d`, look-alike checks `30/1m`, admin login `5/15m` (all in Admin → Réglages).
+22. **Rate-limit defaults** — per visitor: votes `3/3s,300/1h`, questions `120/1m`, submissions
+    `5/1h,20/1d`, look-alike checks `30/1m`; **per IP hash, 10× looser** (`30/3s,3000/1h`,
+    `1200/1m`, `20/1h,60/1d`, `300/1m`) because a whole office/school/mobile NAT shares one IP —
+    found by the browser test; admin login `5/15m`. All editable in Admin → Réglages.
+23. **One env file** (`plats.env`) feeds compose interpolation (image tag, host, Traefik network /
+    entrypoint / resolver) and the app, so the owner edits a single file. HSTS comes from a
+    Traefik middleware declared in the compose labels.
+24. **Deployment is a script** (`scripts/deploy.sh`) so the on-box session runs one command with
+    built-in verification; it imports the catalogue only when it is (nearly) empty.
+25. **`HEAD` is answered like `GET`** (uptime monitors, `curl -I`) — found during the rehearsal.
+26. **Logs monitoring** is a stdlib script run with the container's own Python
+    (`scripts/logs.sh` → `monitor_logs.py`): no agent or extra service on the box.
+27. **The import runs synchronously in `deploy.sh`** but in a background thread from the admin
+    button (status shown on the dashboard).
 
-## 7. Known limits / left for later
+## 6. How it was verified
 
-- The Wikidata import was tested only against fixtures (the build sandbox had no access to
-  Wikidata); the first real run is part of the deploy checklist above. If the SPARQL endpoint times
-  out, simply re-run it (idempotent).
-- Images are opt-in and untested against the live Commons API for the same reason.
-- No automated browser test of the JS animations (logic is unit-tested server-side; the JS
-  SHA-256 was checked against Python's `hashlib`).
+- **pytest**: 122 tests (tokens, one vote per dish, weighting, rate limits, normalisation, xlsx zero
+  formula, admin auth/CSRF/lockout/TOTP replay, importer idempotency on fixtures…).
+- **CI on every push**: tests → image → Trivy CRITICAL gate → container smoke → **browser e2e
+  (Chromium, 111 checks: play loop, milestones 5/25/30, reduced motion, no-JS, mobile, dark mode,
+  proposals with look-alikes and PoW, search/sort/stats, every admin screen, export, lockout) with
+  the container logs monitored (no error, no 5xx, no raw IP)** → push to GHCR. Screenshots are kept
+  as a CI artifact.
+- **Rehearsal of the box**: Traefik v3.6 on a `traefik` network + `plats.env` prepared as above →
+  `scripts/deploy.sh` (first run, re-run, variable change) → full browser suite **through Traefik
+  over HTTPS** with production cookie settings: 111/111; client IP correctly taken from Traefik's
+  `X-Forwarded-For`; HSTS from the Traefik middleware.
+- **Live Wikidata**: workflow `wikidata-live` (manual) runs the real import in CI and reports
+  counts, a random sample and idempotency on live data.
+
+## 7. Known limits
+
+- Images (`--images`) are opt-in; check the `wikidata-live` run with images before enabling them.
+- Rate limiting is in memory (single worker); it resets on restart.

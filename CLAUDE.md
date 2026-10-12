@@ -23,3 +23,13 @@ Build the site specified in `BRIEF.md` (read it fully first). Owner: Alexandre (
 - No external runtime calls from the browser (no CDN, fonts, analytics). Wikidata/Wikimedia calls
   happen server-side in the importer only, with a descriptive User-Agent.
 - Commit in small, clearly described steps on `main`.
+
+## If you are the on-box deployment session (production server)
+- Follow `DEPLOY.md` §1 exactly: fetch the release tag, then `scripts/deploy.sh`, then
+  `scripts/logs.sh follow` / `report`. Run only those commands (plus read-only diagnostics such as
+  `docker ps`, `docker network ls`, `docker compose … logs`).
+- `plats.env` is prepared by the owner. **Never print, cat, grep, copy or edit it**, never echo
+  secrets; `deploy.sh` validates it without showing values. If a variable is wrong, tell the owner
+  which one (the script's error says it) and stop.
+- Never run `scripts/set-admin.sh` yourself (it is interactive and owner-only), never change code
+  on the box, never delete the `plats-data` volume.
