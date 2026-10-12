@@ -9,3 +9,4 @@ __pycache__/
 .venv/
 exports/
 *.xlsx
+.sandbox-ca.crt

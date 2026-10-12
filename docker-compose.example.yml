@@ -1,0 +1,52 @@
+# Example deployment behind Traefik (no secrets here). Copy to docker-compose.yml on the server.
+#   1. scripts/set-admin.sh ./plats.env       (interactive: admin password + TOTP)
+#   2. docker compose up -d
+#   3. docker compose exec plats python scripts/import_wikidata.py   (or the button in /admin/plats)
+services:
+  plats:
+    image: ghcr.io/pazka/plats:v0.1.0
+    container_name: plats
+    restart: unless-stopped
+    env_file: ./plats.env          # chmod 600; see .env.example
+    volumes:
+      - plats-data:/data           # SQLite DB (+WAL), cached images, generated secrets
+    # --- hardening ---
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    user: "10001:10001"
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    # No published port: Traefik reaches the container on the shared network, port 8000.
+    expose: ["8000"]
+    networks: [traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.plats.rule=Host(`plats.hosh.it`)
+      - traefik.http.routers.plats.entrypoints=websecure
+      - traefik.http.routers.plats.tls.certresolver=letsencrypt
+      - traefik.http.services.plats.loadbalancer.server.port=8000
+      # HSTS is set by Traefik (the app sets CSP and the other security headers itself).
+      - traefik.http.middlewares.plats-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.plats-hsts.headers.stsIncludeSubdomains=true
+      - traefik.http.routers.plats.middlewares=plats-hsts
+
+volumes:
+  plats-data:
+
+networks:
+  traefik:
+    external: true

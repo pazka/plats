@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+data
+tests
+**/__pycache__
+.pytest_cache
+*.sqlite3
+*.db
+*.xlsx
+.env
+.env.*
+docker-compose*.yml
+*.md
