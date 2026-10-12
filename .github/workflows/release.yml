@@ -1,9 +1,16 @@
 name: release
 
 # tag vX.Y.Z → tests → build → Trivy CRITICAL gate → push :vX.Y.Z, :X.Y and :latest → GitHub release
+# Also runnable by hand (Actions → release → Run workflow, e.g. version "v0.1.0"): the tag is then
+# created on the dispatched commit together with the GitHub release.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to create, e.g. v0.1.0"
+        required: true
 
 permissions:
   contents: read
@@ -37,8 +44,11 @@ jobs:
 
       - name: Version from tag
         id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${INPUT_VERSION:-$GITHUB_REF_NAME}"
+          if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then echo "bad version: $tag" >&2; exit 1; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "minor=$(echo "${tag#v}" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
 
@@ -91,5 +101,9 @@ jobs:
         run: |
           tag="${{ steps.v.outputs.tag }}"
           notes="Image: \`${IMAGE}:${tag}\` (also \`:latest\`). Deployment: see DEPLOY.md."
-          gh release view "$tag" >/dev/null 2>&1 \
-            || gh release create "$tag" --title "plats $tag" --notes "$notes" --verify-tag
+          if gh release view "$tag" >/dev/null 2>&1; then exit 0; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            gh release create "$tag" --title "plats $tag" --notes "$notes" --verify-tag
+          else
+            gh release create "$tag" --title "plats $tag" --notes "$notes" --target "$GITHUB_SHA"
+          fi
