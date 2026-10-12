@@ -34,7 +34,7 @@ the first problem:
    (lists the host's networks if not); compose config valid;
 2. **pull + up** (`docker compose --env-file plats.env`, service `plats`);
 3. **wait healthy**, then checks uid 10001 and the read-only root filesystem;
-4. **Wikidata import** if the catalogue has < 100 dishes (a few minutes; expects ≥ 500 dishes);
+4. **Wikidata import** if the catalogue has < 100 dishes (~3 minutes, ≈985 dishes; fails below 500);
 5. **smoke checks** inside the container, then **through Traefik** at `https://$PLATS_HOST`
    (+ HSTS header check);
 6. **log report** of the last 15 minutes (errors, 5xx, security events).
@@ -185,6 +185,15 @@ strips quotes itself if the file is used with `docker run --env-file`.
     (`scripts/logs.sh` → `monitor_logs.py`): no agent or extra service on the box.
 27. **The import runs synchronously in `deploy.sh`** but in a background thread from the admin
     button (status shown on the dashboard).
+28. **Import clean-up from the live run** (vetoable): French labels are capitalised ("coq au vin" →
+    "Coq au vin"), trailing qualifiers dropped ("Liaison (cuisine)" → "Liaison"), and items whose
+    description starts with *marque, entreprise, société, restaurant, enseigne, cultivar, race,
+    ustensile, label…* are skipped (66 live: cheese brands, an olive cultivar, cattle breeds…).
+    Cheeses, charcuterie, sauces and produce are **kept** — they are what "Ingrédient" is for.
+    "McBaguette" and a few borderline items remain: hide them in the admin if unwanted.
+29. **frwiki enrichment is paced** (~20 req/s, serial, honours `Retry-After` on 429/503); unpaced,
+    Wikimedia throttled it to 53 successes out of ~800. A re-run never replaces a longer
+    (e.g. enriched) description by a shorter one.
 
 ## 6. How it was verified
 
@@ -199,10 +208,13 @@ strips quotes itself if the file is used with `docker run --env-file`.
   `scripts/deploy.sh` (first run, re-run, variable change) → full browser suite **through Traefik
   over HTTPS** with production cookie settings: 111/111; client IP correctly taken from Traefik's
   `X-Forwarded-For`; HSTS from the Traefik middleware.
-- **Live Wikidata**: workflow `wikidata-live` (manual) runs the real import in CI and reports
-  counts, a random sample and idempotency on live data.
+- **Live Wikidata** (workflow `wikidata-live`, real endpoints, hardened container): 1 229 items
+  fetched → 178 drinks and 66 non-dishes skipped → **985 dishes** in ~3 min; 652 descriptions
+  enriched from frwiki (all HTTP 200), 114 still under 40 characters (50 empty); with `--images`,
+  78 thumbnails with licence. Re-run: 0 created, 0 changed. Smoke checks pass on that catalogue.
 
 ## 7. Known limits
 
-- Images (`--images`) are opt-in; check the `wikidata-live` run with images before enabling them.
+- Images (`--images`) are opt-in: only ~78 dishes get one (Commons coverage + licence filter).
+- ~50 dishes have no description at all (no frwiki article); the question then shows the title only.
 - Rate limiting is in memory (single worker); it resets on restart.
