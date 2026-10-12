@@ -43,7 +43,6 @@
       {% for c in categories %}
         <button type="submit" name="choice" value="{{ c.slug }}" class="cat cat-{{ c.slug }}"
                 data-key="{{ loop.index if loop.index < 10 else (0 if loop.index == 10 else '') }}">
-          <span class="emoji" aria-hidden="true">{{ c.emoji }}</span>
           <span class="label">{{ c.name }}</span>
           {% if loop.index <= 10 %}<kbd aria-hidden="true">{{ loop.index % 10 }}</kbd>{% endif %}
         </button>

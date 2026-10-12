@@ -133,7 +133,6 @@ h2 { margin-top: 1.6em; }
   background: var(--cat); color: var(--cat-fg); font: inherit; font-weight: 700; cursor: pointer; text-align: left;
   box-shadow: 0 3px 0 rgb(0 0 0 / 0.25); transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.2s;
 }
-.cat .emoji { font-size: 1.4rem; }
 .cat .label { flex: 1; }
 .cat:hover { filter: brightness(1.07); }
 .cat:active, .cat.pressed { transform: translateY(2px); box-shadow: 0 1px 0 rgb(0 0 0 / 0.25); }

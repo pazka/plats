@@ -78,6 +78,8 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
     check(h["content-security-policy"] && h["content-security-policy"].includes("script-src 'self'"), "CSP header");
     check(h["x-frame-options"] === "DENY" && h["x-content-type-options"] === "nosniff", "frame/nosniff headers");
     check((await play.locator(".cats button.cat").count()) === 10, "10 category buttons (incl. Saucisse)");
+    const labels = await play.$$eval(".cats button.cat", (els) => els.map((e) => e.textContent));
+    check(labels.every((t) => !/\p{Extended_Pictographic}/u.test(t)), "answer buttons show no emoji");
     check((await play.textContent("#dish-title")).trim().length > 0, "a dish is shown");
     const cookies = await play.context().cookies();
     const v = cookies.find((c) => c.name === "plats_v");

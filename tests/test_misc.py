@@ -171,3 +171,14 @@ def test_saucisse_is_playable_with_key_0(client, dishes, no_think):
     q = client.get("/api/question").json()["next"]
     r = client.post("/api/vote", json={"token": q["token"], "choice": "saucisse"})
     assert r.status_code == 200 and r.json()["same_pct"] == 100
+
+
+def test_answer_buttons_have_no_emoji(client, dishes):
+    """Emoji would steer the answer: the buttons show the category name only."""
+    import re
+    from app import seed_data
+    html = client.get("/").text
+    form = html[html.index('id="answer-form"'):html.index("</form>", html.index('id="answer-form"'))]
+    for _, name, _, emoji in seed_data.CATEGORIES + [seed_data.CATEGORY_SAUCISSE]:
+        assert emoji not in form and name in form
+    assert not re.search(r'class="emoji"', form)
