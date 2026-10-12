@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Proposer un plat — plats.hosh.it{% endblock %}
+{% block page %}propose{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Proposer un plat</h1>
+  <p class="lead">Il manque un plat ? Décrivez-le : il rejoindra la liste et ce sont les autres
+    participants qui diront à quoi il ressemble. (Pas de catégorie à choisir, c'est tout l'intérêt !)</p>
+
+  {% if errors %}
+  <div class="alert" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>
+  {% endif %}
+
+  <form method="post" action="/proposer" id="propose-form" data-difficulty="{{ difficulty }}" novalidate>
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="pow_nonce" value="">
+    <div class="hp" aria-hidden="true">
+      <label for="website">Ne pas remplir</label>
+      <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    {% if similar %}
+    <div class="similar" role="region" aria-labelledby="similar-title">
+      <h2 id="similar-title">C'est peut-être l'un de ceux-là ?</h2>
+      <ul>
+      {% for s in similar %}
+        <li>
+          <strong>{{ s.title }}</strong>{% if s.pending %} <em>(proposition en attente)</em>{% endif %}
+          <p>{{ s.description or "Pas encore de description." }}</p>
+          <button type="submit" name="decision" value="same:{{ s.id }}" class="btn btn-secondary">Oui, c'est celui-là</button>
+        </li>
+      {% endfor %}
+      </ul>
+      <p><button type="submit" name="decision" value="different" class="btn">Non, c'est un autre plat</button></p>
+      <p class="hint">Si c'est un autre plat, vérifiez que la description fait bien la différence.</p>
+    </div>
+    {% endif %}
+
+    <div class="field">
+      <label for="nom">Nom du plat <span class="req">(obligatoire)</span></label>
+      <input type="text" id="nom" name="nom" required minlength="{{ limits.name[0] }}" maxlength="{{ limits.name[1] }}"
+             value="{{ values.nom or '' }}" autocomplete="off" aria-describedby="similar-live">
+      <div id="similar-live" class="similar-live" aria-live="polite"></div>
+    </div>
+    <div class="field">
+      <label for="description">Description <span class="req">(obligatoire, {{ limits.desc[0] }}–{{ limits.desc[1] }} caractères)</span></label>
+      <textarea id="description" name="description" required rows="5" minlength="{{ limits.desc[0] }}"
+                maxlength="{{ limits.desc[1] }}"
+                placeholder="Qu'y a-t-il dedans ? Et surtout : comment est-il présenté, servi, mangé ? (dans une assiette creuse, entre deux tranches de pain, en part, gratiné au four…)">{{ values.description or '' }}</textarea>
+      <p class="counter" id="desc-counter" aria-live="polite"></p>
+    </div>
+    <div class="field">
+      <label for="region">Région / origine <span class="opt">(facultatif)</span></label>
+      <input type="text" id="region" name="region" maxlength="{{ limits.region }}" value="{{ values.region or '' }}">
+    </div>
+    <p class="actions">
+      {% if not similar %}<button type="submit" class="btn" id="propose-submit">Proposer ce plat</button>{% endif %}
+      <span class="pow-status" id="pow-status" aria-live="polite"></span>
+    </p>
+    <noscript><p class="alert">JavaScript est nécessaire pour envoyer ce formulaire (petite vérification anti-robot, sans service tiers).</p></noscript>
+  </form>
+</section>
+{% endblock %}

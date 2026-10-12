@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+{% block title %}Connexion{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Connexion</h1>
+  {% if not configured %}
+  <p class="alert">L'administration n'est pas encore configurée : lancez <code>scripts/set-admin.sh</code> sur le serveur.</p>
+  {% endif %}
+  <form method="post" action="/admin/login">
+    <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+    </div>
+    <div class="field">
+      <label for="totp">Code à usage unique (TOTP)</label>
+      <input type="text" id="totp" name="totp" required inputmode="numeric" pattern="[0-9 ]{6,7}"
+             autocomplete="one-time-code" maxlength="7">
+    </div>
+    <button type="submit" class="btn">Se connecter</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block title %}Propositions{% endblock %}
+{% block content %}
+<h1>Propositions</h1>
+<p class="tabs">
+  {% for key, label in (('queue', 'À modérer'), ('active', 'Publiées'), ('rejected', 'Rejetées'), ('all', 'Toutes')) %}
+  <a href="?statut={{ key }}"{% if statut == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</p>
+{% for it in items %}
+{% set d = it.dish %}
+<article class="card submission">
+  <h2>{{ d.title }} <span class="tag tag-{{ d.status }}">{{ d.status }}</span></h2>
+  {% if d.flag_reason %}<p class="alert">{{ d.flag_reason }}</p>{% endif %}
+  <p>{{ d.description }}</p>
+  {% if d.region %}<p class="muted">Région : {{ d.region }}</p>{% endif %}
+  <p class="muted">#{{ d.id }} · {{ d.created_at | dt }} · visiteur <code>{{ d.submitter_visitor }}</code> · IP <code>{{ d.submitter_ip_hash }}</code></p>
+  {% if it.similar %}<p>Ressemble à : {% for s in it.similar %}<a href="/admin/plats/{{ s.id }}">{{ s.title }}</a> (#{{ s.id }}, {{ s.score }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <div class="row-actions">
+    <form method="post" action="/admin/propositions/{{ d.id }}" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if d.status != 'active' %}<button name="action" value="approve" class="btn">Approuver</button>{% endif %}
+      {% if d.status != 'rejected' %}<button name="action" value="reject" class="btn btn-secondary">Rejeter</button>{% endif %}
+    </form>
+    <a class="btn btn-secondary" href="/admin/plats/{{ d.id }}">Modifier</a>
+    <form method="post" action="/admin/propositions/{{ d.id }}" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="action" value="merge">
+      <input name="target" placeholder="id ou slug cible" required aria-label="Plat cible"
+             {% if it.similar %}value="{{ it.similar[0].id }}"{% endif %}>
+      <button type="submit" class="btn btn-secondary" data-confirm="Fusionner cette proposition ?">Fusionner dans…</button>
+    </form>
+  </div>
+</article>
+{% else %}
+<p class="muted">Rien ici.</p>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "admin/base.html" %}
+{% block title %}Réglages{% endblock %}
+{% block content %}
+<h1>Réglages</h1>
+<form method="post" action="/admin/reglages" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="check"><input type="checkbox" name="require_approval" value="1"{% if require_approval %} checked{% endif %}>
+    Toute proposition doit être approuvée avant d'apparaître (<code>require_approval</code>)</label>
+  <p class="muted">Limites : « nombre/fenêtre » séparés par des virgules, fenêtre en s, m, h ou d (ex. <code>5/1h,20/1d</code>).
+    Elles s'appliquent séparément par visiteur ET par empreinte IP.</p>
+  {% for key, label, kind in fields %}
+  <label>{{ label }} <code>{{ key }}</code>
+    <input name="{{ key }}" value="{{ values[key] }}"{% if kind != 'intblank' %} required{% endif %}></label>
+  {% endfor %}
+  <button type="submit" class="btn">Enregistrer</button>
+</form>
+{% endblock %}

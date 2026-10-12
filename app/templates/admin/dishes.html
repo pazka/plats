@@ -1,0 +1,91 @@
+{% extends "admin/base.html" %}
+{% block title %}Plats{% endblock %}
+{% block content %}
+<h1>Plats <span class="muted">({{ total | num }})</span></h1>
+
+<form method="get" action="/admin/plats" class="filters">
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Titre, slug ou QID" aria-label="Recherche">
+  <select name="source" aria-label="Source">
+    <option value="">Toutes sources</option>
+    {% for s in ('wikidata', 'user', 'manual') %}<option value="{{ s }}"{% if f.source == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="status" aria-label="Statut">
+    <option value="">Tous statuts</option>
+    {% for s in statuses %}<option value="{{ s }}"{% if f.status == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="votes" aria-label="Réponses">
+    <option value="">Toutes</option>
+    {% for k, label in (('0', '0 réponse'), ('1', '≥ 1'), ('5', '≥ 5'), ('20', '≥ 20')) %}<option value="{{ k }}"{% if f.votes == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn">Filtrer</button>
+</form>
+
+<form method="post" action="/admin/plats/action" id="bulk" class="bulk">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="return_to" value="{{ request.url.path }}?{{ request.url.query }}">
+  <label for="bulk-action">Pour la sélection :</label>
+  <select name="action" id="bulk-action">
+    <option value="hide">Masquer</option>
+    <option value="activate">Activer</option>
+    <option value="reject">Rejeter</option>
+  </select>
+  <button type="submit" class="btn">Appliquer</button>
+</form>
+
+<table class="table">
+  <thead><tr><th><input type="checkbox" data-check-all="ids" aria-label="Tout sélectionner"></th>
+    <th>#</th><th>Titre</th><th>Source</th><th>Statut</th><th>Réponses</th></tr></thead>
+  <tbody>
+  {% for d in rows %}
+  <tr>
+    <td><input type="checkbox" name="ids" value="{{ d.id }}" form="bulk" aria-label="Sélectionner {{ d.title }}"></td>
+    <td>{{ d.id }}</td>
+    <td><a href="/admin/plats/{{ d.id }}">{{ d.title }}</a>{% if d.flag_reason %} <span class="tag tag-warn">{{ d.flag_reason }}</span>{% endif %}</td>
+    <td>{{ d.source }}{% if d.qid %} <span class="muted">{{ d.qid }}</span>{% endif %}</td>
+    <td><span class="tag tag-{{ d.status }}">{{ d.status }}</span></td>
+    <td>{{ d.n }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">Aucun plat.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page_no > 1 %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;page_no={{ page_no - 1 }}">← Précédent</a>{% endif %}
+  <span>Page {{ page_no }} / {{ pages }}</span>
+  {% if page_no < pages %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;page_no={{ page_no + 1 }}">Suivant →</a>{% endif %}
+</nav>
+{% endif %}
+
+<div class="cards">
+  <section class="card">
+    <h2>Fusionner des doublons</h2>
+    <p class="muted">Les réponses de la source passent sur la cible ; si une personne a répondu aux deux, seule sa réponse sur la cible est gardée.</p>
+    <form method="post" action="/admin/plats/fusion">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Source (id ou slug) <input name="source" required></label>
+      <label>Cible (id ou slug) <input name="target" required></label>
+      <button type="submit" class="btn" data-confirm="Fusionner ces deux plats ?">Fusionner</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Import Wikidata</h2>
+    {% include "admin/_import_status.html" %}
+    <form method="post" action="/admin/import">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label><input type="checkbox" name="enrich" value="1" checked> Compléter les descriptions courtes avec Wikipédia</label>
+      <label><input type="checkbox" name="images" value="1"> Télécharger les images (Commons, avec licence)</label>
+      <button type="submit" class="btn">Lancer l'import</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Ajouter un plat</h2>
+    <form method="post" action="/admin/plats/nouveau">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Titre <input name="title" required minlength="2" maxlength="120"></label>
+      <label>Description <textarea name="description" rows="3" maxlength="1000"></textarea></label>
+      <label>Région <input name="region" maxlength="80"></label>
+      <button type="submit" class="btn">Ajouter</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

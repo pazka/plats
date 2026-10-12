@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}À propos — plats.hosh.it{% endblock %}
+{% block content %}
+<section class="panel prose">
+  <h1>À propos</h1>
+  <p><strong>plats.hosh.it</strong> est une petite expérience sociale : on vous montre un plat
+    français, vous dites à quelle catégorie il ressemble le plus — Ingrédient, Pain, Purée, Soupe,
+    Sandwich, Tarte, Gratin, Ragoût ou Salade. Une quiche, c'est une tarte ? Un croque-monsieur,
+    un sandwich ou un gratin ? Le hachis parmentier, une purée ? À vous de voir.</p>
+  <p>Il n'y a rien à gagner, pas de bonne réponse, juste un merci de plus en plus coloré à chaque
+    réponse. Les résultats agrégés sont publics, plat par plat, et sur la page
+    <a href="/stats">statistiques</a>.</p>
+
+  <h2>Ce qui est enregistré</h2>
+  <ul>
+    <li><strong>Un identifiant anonyme aléatoire</strong>, dans un cookie strictement fonctionnel
+      (il sert uniquement à ne pas vous reposer deux fois la même question et à compter vos réponses).
+      Aucun compte, aucun nom, aucune adresse e-mail.</li>
+    <li><strong>Vos réponses</strong> : le plat, la catégorie choisie (ou « je ne connais pas ») et la date.</li>
+    <li><strong>Une empreinte de votre adresse IP</strong> : jamais l'adresse elle-même, seulement un
+      hachage cryptographique salé (HMAC), utile pour repérer les abus.</li>
+    <li>Les plats que vous proposez, si vous en proposez.</li>
+  </ul>
+  <h2>Ce qui ne l'est pas</h2>
+  <ul>
+    <li>Aucun traceur, aucune statistique d'audience tierce, aucune publicité, aucune police ou
+      ressource chargée depuis un autre site. Le cookie étant strictement nécessaire, pas de bandeau.</li>
+    <li>Aucune donnée individuelle n'est publiée.</li>
+  </ul>
+  <h2>Les données</h2>
+  <p>La liste de départ vient de <a href="https://www.wikidata.org">Wikidata</a> (domaine public, CC0),
+    complétée par les extraits de Wikipédia et par vos propositions. Les images éventuelles sont
+    hébergées ici, avec leur auteur et leur licence.</p>
+  <h2>Contact</h2>
+  <p>{% if contact %}{{ contact }}{% else %}Via le dépôt <a href="https://github.com/pazka/plats">github.com/pazka/plats</a>.{% endif %}</p>
+</section>
+{% endblock %}

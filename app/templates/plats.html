@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Les plats — plats.hosh.it{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Les plats</h1>
+  <form method="get" action="/plats" class="search" role="search">
+    <label for="q" class="sr-only">Rechercher un plat</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="Rechercher (ex. : cassoulet, quiche…)">
+    <label for="tri" class="sr-only">Trier</label>
+    <select id="tri" name="tri">
+      {% for key, label in sorts.items() %}<option value="{{ key }}"{% if key == tri %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn">OK</button>
+  </form>
+  <p class="muted">{{ total | num }} plat{{ 's' if total != 1 }}{% if q %} pour « {{ q }} »{% endif %}{% if tri in ('consensus', 'dispute') %} (au moins 3 réponses){% endif %}.</p>
+  <ul class="dish-list">
+  {% for it in items %}
+    <li>
+      <a href="/plat/{{ it.dish.slug }}">{{ it.dish.title }}</a>
+      <span class="meta">
+        {% if it.top %}<span class="chip cat-{{ it.top.slug }}">{{ it.top.emoji }} {{ it.top.name }} {{ (it.top_share * 100) | round | int }} %</span>{% endif %}
+        {{ it.total }} réponse{{ 's' if it.total != 1 }}
+      </span>
+    </li>
+  {% else %}
+    <li class="muted">Aucun plat trouvé.</li>
+  {% endfor %}
+  </ul>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pagination">
+    {% if page > 1 %}<a href="/plats?q={{ q | urlencode }}&amp;tri={{ tri }}&amp;page={{ page - 1 }}">← Précédent</a>{% endif %}
+    <span>Page {{ page }} / {{ pages }}</span>
+    {% if page < pages %}<a href="/plats?q={{ q | urlencode }}&amp;tri={{ tri }}&amp;page={{ page + 1 }}">Suivant →</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}

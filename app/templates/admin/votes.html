@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% block title %}Réponses{% endblock %}
+{% block content %}
+<h1>Réponses <span class="muted">({{ total | num }})</span></h1>
+<form method="get" action="/admin/votes" class="filters">
+  <input name="plat" value="{{ f.plat }}" placeholder="Plat (id ou slug)" aria-label="Plat">
+  <select name="categorie" aria-label="Catégorie">
+    <option value="">Toutes catégories</option>
+    {% for c in categories %}<option value="{{ c.slug }}"{% if f.categorie == c.slug %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    <option value="skip"{% if f.categorie == 'skip' %} selected{% endif %}>« Je ne connais pas »</option>
+  </select>
+  <input name="visiteur" value="{{ f.visiteur }}" placeholder="Visiteur" aria-label="Visiteur">
+  <input name="ip" value="{{ f.ip }}" placeholder="Empreinte IP" aria-label="Empreinte IP">
+  <label>du <input type="date" name="du" value="{{ f.du }}"></label>
+  <label>au <input type="date" name="au" value="{{ f.au }}"></label>
+  <button type="submit" class="btn">Filtrer</button>
+</form>
+
+<div class="cards">
+  <form method="post" action="/admin/votes/supprimer" id="sel" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="mode" value="selected">
+    <button type="submit" class="btn btn-danger" data-confirm="Supprimer les réponses cochées ?">Supprimer la sélection</button>
+  </form>
+  {% if qs %}
+  <form method="post" action="/admin/votes/supprimer" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="mode" value="filter">
+    {% for k, v in f.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <button type="submit" class="btn btn-danger" data-confirm="Supprimer les {{ total }} réponses correspondant au filtre ?">Supprimer les {{ total | num }} réponses filtrées</button>
+  </form>
+  {% endif %}
+  <form method="post" action="/admin/votes/supprimer" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Tout supprimer pour
+      <select name="mode"><option value="visitor">le visiteur</option><option value="ip">l'empreinte IP</option></select></label>
+    <input name="value" required placeholder="identifiant" aria-label="Identifiant" value="{{ f.visiteur or f.ip }}">
+    <button type="submit" class="btn btn-danger" data-confirm="Supprimer toutes ses réponses ?">Supprimer</button>
+  </form>
+</div>
+
+<table class="table">
+  <thead><tr><th><input type="checkbox" data-check-all="ids" aria-label="Tout sélectionner"></th>
+    <th>Date</th><th>Plat</th><th>Réponse</th><th>Visiteur</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for v in rows %}
+  <tr>
+    <td><input type="checkbox" name="ids" value="{{ v.id }}" form="sel" aria-label="Sélectionner"></td>
+    <td>{{ v.created_at | dt }}</td>
+    <td><a href="/admin/plats/{{ v.dish_id }}">{{ v.dish_title }}</a></td>
+    <td>{% if v.cat_slug %}<span class="chip cat-{{ v.cat_slug }}">{{ v.cat_name }}</span>{% else %}<em>je ne connais pas</em>{% endif %}</td>
+    <td><a href="?visiteur={{ v.visitor_id | urlencode }}"><code>{{ v.visitor_id[:10] }}…</code></a></td>
+    <td><a href="?ip={{ v.ip_hash | urlencode }}"><code>{{ v.ip_hash[:10] }}…</code></a></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">Aucune réponse.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page_no > 1 %}<a href="?{{ qs }}&amp;page_no={{ page_no - 1 }}">← Précédent</a>{% endif %}
+  <span>Page {{ page_no }} / {{ pages }}</span>
+  {% if page_no < pages %}<a href="?{{ qs }}&amp;page_no={{ page_no + 1 }}">Suivant →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

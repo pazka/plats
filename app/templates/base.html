@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}plats.hosh.it — à quoi ressemble ce plat ?{% endblock %}</title>
+<meta name="description" content="Une expérience sociale : à quelle catégorie chaque plat français ressemble-t-il le plus ?">
+<link rel="stylesheet" href="/static/style.css?v={{ version }}">
+<link rel="stylesheet" href="/categories.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<script src="/static/app.js?v={{ version }}" defer></script>
+</head>
+<body data-page="{% block page %}{% endblock %}">
+<a class="skip-link" href="#main">Aller au contenu</a>
+<header class="site-header">
+  <a class="brand" href="/">plats<span>.hosh.it</span></a>
+  <nav aria-label="Navigation principale">
+    <a href="/"{% if request.url.path == '/' %} aria-current="page"{% endif %}>Jouer</a>
+    <a href="/proposer"{% if request.url.path == '/proposer' %} aria-current="page"{% endif %}>Proposer</a>
+    <a href="/plats"{% if request.url.path.startswith('/plat') %} aria-current="page"{% endif %}>Plats</a>
+    <a href="/stats"{% if request.url.path == '/stats' %} aria-current="page"{% endif %}>Stats</a>
+    <a href="/a-propos"{% if request.url.path == '/a-propos' %} aria-current="page"{% endif %}>À propos</a>
+  </nav>
+</header>
+<main id="main" tabindex="-1">
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+  <p>Une expérience sociale sans compte, sans pub, sans traceur. Données des plats : <a href="https://www.wikidata.org">Wikidata</a> (CC0).</p>
+</footer>
+</body>
+</html>

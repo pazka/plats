@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Merci ! — plats.hosh.it{% endblock %}
+{% block content %}
+<section class="panel center">
+  <h1>Merci ! 🙌</h1>
+  {% if duplicate %}
+  <p>Parfait, ce plat est déjà dans la liste : pas de doublon.</p>
+  {% else %}
+  <p>Votre plat rejoint la liste (il sera peut-être relu avant d'apparaître). D'autres personnes diront à quoi il ressemble.</p>
+  {% endif %}
+  <p><a class="btn" href="/">Continuer à jouer</a> <a class="btn btn-secondary" href="/proposer">Proposer un autre plat</a></p>
+</section>
+{% endblock %}

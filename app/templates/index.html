@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block page %}play{% endblock %}
+{% block content %}
+<section class="game" id="game">
+  <div class="meter-wrap">
+    <div class="meter" role="progressbar" aria-label="Progression vers le prochain palier"
+         aria-valuemin="{{ reward.progress.from }}" aria-valuemax="{{ reward.progress.to }}"
+         aria-valuenow="{{ reward.progress.value }}">
+      <div class="meter-fill" id="meter-fill" data-pct="{{ ((reward.progress.value - reward.progress.from) / 5 * 100) | round | int }}"></div>
+    </div>
+    <p class="meter-label"><span id="count">{{ count }}</span> réponse{{ 's' if count != 1 }}
+      <span id="badge" class="badge">{{ reward.badge or '' }}</span>
+      <span class="next-stop">· prochain palier : <span id="next-stop">{{ reward.progress.to }}</span></span></p>
+  </div>
+
+  <div id="result" class="result" aria-live="polite">
+  {% if previous %}
+    <p class="same">
+      {% if previous.same %}<strong>{{ previous.same.pct }} %</strong> ont répondu comme toi
+      ({{ previous.same.emoji }} {{ previous.same.name }}) pour « {{ previous.dish.title }} ».{% endif %}
+    </p>
+    <ul class="mini-dist">
+    {% for r in previous.dist.rows if r.count %}
+      <li class="cat-{{ r.slug }}"><span class="bar" data-pct="{{ r.pct }}"></span><span>{{ r.emoji }} {{ r.name }} {{ r.pct }} %</span></li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+  </div>
+
+  <article class="dish-card" id="question"{% if not question %} hidden{% endif %}>
+    <figure class="dish-img" id="dish-figure"{% if not (question and question.dish.image) %} hidden{% endif %}>
+      <img id="dish-image"{% if question and question.dish.image %} src="{{ question.dish.image }}"{% endif %} alt="" width="480" height="320">
+      <figcaption id="dish-credit">{% if question and question.dish.image %}Image : {{ question.dish.image_author }} — {{ question.dish.image_license }}{% endif %}</figcaption>
+    </figure>
+    <p class="prompt">Ce plat ressemble surtout à…</p>
+    <h1 id="dish-title">{{ question.dish.title if question else '' }}</h1>
+    <p id="dish-desc" class="dish-desc">{{ question.dish.description if question else '' }}</p>
+    <p id="dish-region" class="dish-region"{% if not (question and question.dish.region) %} hidden{% endif %}>{{ question.dish.region if question else '' }}</p>
+
+    <form method="post" action="/voter" id="answer-form">
+      <input type="hidden" name="token" id="token" value="{{ question.token if question else '' }}">
+      <div class="cats" role="group" aria-label="Catégories">
+      {% for c in categories %}
+        <button type="submit" name="choice" value="{{ c.slug }}" class="cat cat-{{ c.slug }}"
+                data-key="{{ loop.index if loop.index < 10 else '' }}">
+          <span class="emoji" aria-hidden="true">{{ c.emoji }}</span>
+          <span class="label">{{ c.name }}</span>
+          {% if loop.index < 10 %}<kbd aria-hidden="true">{{ loop.index }}</kbd>{% endif %}
+        </button>
+      {% endfor %}
+      </div>
+      <button type="submit" name="choice" value="skip" class="skip" data-key="0">
+        Je ne connais pas ce plat <kbd aria-hidden="true">0</kbd>
+      </button>
+    </form>
+    <p class="hint">Astuce : touches <kbd>1</kbd>–<kbd>9</kbd> pour répondre, <kbd>0</kbd> pour passer.</p>
+  </article>
+
+  <section class="end" id="end"{% if question %} hidden{% endif %}>
+    <h1>Vous avez fait le tour ! 🎉</h1>
+    <p>Vous avez répondu à tous les plats disponibles. Merci infiniment.</p>
+    <p>Revenez plus tard : de nouveaux plats arrivent, ou <a href="/proposer">proposez-en un</a>.
+      En attendant, allez voir <a href="/stats">les statistiques</a>.</p>
+  </section>
+</section>
+
+<div id="milestone" class="milestone" role="status" aria-live="assertive" hidden>
+  <p class="milestone-title" id="milestone-title"></p>
+  <p class="milestone-sub" id="milestone-sub"></p>
+</div>
+<canvas id="fx" class="fx" aria-hidden="true"></canvas>
+<script type="application/json" id="initial-state">{{ {"reward": reward, "categories": categories | map(attribute='slug') | list} | tojson }}</script>
+{% endblock %}

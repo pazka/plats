@@ -1,0 +1,60 @@
+{% extends "admin/base.html" %}
+{% block title %}Mots interdits{% endblock %}
+{% block content %}
+<h1>Mots interdits <span class="muted">({{ rows | length }})</span></h1>
+<p class="muted">Comparaison sur un texte normalisé : minuscules, sans accents, leetspeak (0→o 1→i 3→e 4→a @→a $→s), lettres répétées réduites.
+  « mot entier » ne touche que le mot isolé ; « sous-chaîne » le trouve n'importe où. Appliqué au nom, à la description et à la région des propositions.</p>
+
+<div class="cards">
+  <section class="card">
+    <h2>Tester un texte</h2>
+    <form method="post" action="/admin/mots">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <textarea name="text" rows="3" aria-label="Texte à tester">{{ test.text if test else '' }}</textarea>
+      <button name="action" value="test" class="btn">Tester</button>
+    </form>
+    {% if test %}
+    <p>Normalisé : <code>{{ test.norm }}</code></p>
+    <p>{% if test.hits %}<strong>Bloqué</strong> par : {{ test.hits | join(', ') }}{% else %}Aucun mot interdit trouvé.{% endif %}</p>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Ajouter</h2>
+    <form method="post" action="/admin/mots">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input name="word" required maxlength="80" aria-label="Mot">
+      <select name="mode" aria-label="Mode"><option value="word">mot entier</option><option value="substring">sous-chaîne</option></select>
+      <button name="action" value="add" class="btn">Ajouter</button>
+    </form>
+    <h2>Importer</h2>
+    <form method="post" action="/admin/mots">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <textarea name="bulk" rows="4" placeholder="un mot par ligne, optionnellement « mot|substring »" aria-label="Liste"></textarea>
+      <select name="mode" aria-label="Mode par défaut"><option value="word">mot entier</option><option value="substring">sous-chaîne</option></select>
+      <button name="action" value="import" class="btn">Importer</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Re-scanner</h2>
+    <p class="muted">Ré-applique la liste aux propositions publiées ou en attente (celles qui correspondent passent en « flagged »).</p>
+    <form method="post" action="/admin/mots">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button name="action" value="rescan" class="btn">Re-scanner les propositions</button>
+    </form>
+  </section>
+</div>
+
+<form method="post" action="/admin/mots">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <table class="table">
+    <thead><tr><th><input type="checkbox" data-check-all="ids" aria-label="Tout sélectionner"></th><th>Mot</th><th>Normalisé</th><th>Mode</th></tr></thead>
+    <tbody>
+    {% for w in rows %}
+    <tr><td><input type="checkbox" name="ids" value="{{ w.id }}" aria-label="Sélectionner"></td>
+      <td>{{ w.word }}</td><td><code>{{ w.word_norm }}</code></td><td>{{ 'sous-chaîne' if w.mode == 'substring' else 'mot entier' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <button name="action" value="remove" class="btn btn-danger" data-confirm="Retirer les mots cochés ?">Retirer la sélection</button>
+</form>
+{% endblock %}

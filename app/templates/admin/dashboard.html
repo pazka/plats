@@ -1,0 +1,51 @@
+{% extends "admin/base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block content %}
+<h1>Tableau de bord</h1>
+<div class="tiles">
+  <div class="tile"><span class="tile-num">{{ t.answers | num }}</span><span>réponses ({{ t.skips | num }} « je ne connais pas »)</span></div>
+  <div class="tile"><span class="tile-num">{{ t.participants | num }}</span><span>participant·es</span></div>
+  <div class="tile"><span class="tile-num">{{ t.active | num }}</span><span>plats actifs ({{ t.hidden }} masqués)</span></div>
+  <a class="tile" href="/admin/propositions"><span class="tile-num">{{ t.pending + t.flagged }}</span><span>à modérer ({{ t.pending }} en attente, {{ t.flagged }} signalés)</span></a>
+</div>
+<h2>Dernières 24 h</h2>
+<ul>
+  <li>{{ t.answers_24h | num }} réponses par {{ t.participants_24h | num }} participant·es</li>
+  <li>{{ t.submissions_24h | num }} proposition(s) de plat</li>
+</ul>
+
+<h2>Anomalies</h2>
+{% set a = anomalies %}
+{% if not (a.fast_visitors or a.fast_ips or a.churn) %}
+<p class="muted">Rien d'anormal (seuils : {{ a.per_hour }} réponses/heure, {{ a.visitors_per_ip }} visiteurs/IP en 24 h).</p>
+{% endif %}
+{% if a.fast_visitors %}
+<h3>Visiteurs au rythme anormal (dernière heure)</h3>
+<table class="table"><tbody>
+{% for r in a.fast_visitors %}
+<tr><td><code>{{ r.visitor_id }}</code></td><td>{{ r.n }} réponses</td>
+  <td><a href="/admin/votes?visiteur={{ r.visitor_id | urlencode }}">voir / supprimer</a></td></tr>
+{% endfor %}</tbody></table>
+{% endif %}
+{% if a.fast_ips %}
+<h3>Empreintes IP au rythme anormal (dernière heure)</h3>
+<table class="table"><tbody>
+{% for r in a.fast_ips %}
+<tr><td><code>{{ r.ip_hash }}</code></td><td>{{ r.n }} réponses</td>
+  <td><a href="/admin/votes?ip={{ r.ip_hash | urlencode }}">voir / supprimer</a></td></tr>
+{% endfor %}</tbody></table>
+{% endif %}
+{% if a.churn %}
+<h3>Beaucoup de visiteurs différents derrière une même IP (24 h)</h3>
+<p class="muted">Peut être un réseau partagé (entreprise, école, opérateur mobile) — ou du renouvellement de cookies.</p>
+<table class="table"><tbody>
+{% for r in a.churn %}
+<tr><td><code>{{ r.ip_hash }}</code></td><td>{{ r.n }} visiteurs, {{ r.votes }} réponses</td>
+  <td><a href="/admin/votes?ip={{ r.ip_hash | urlencode }}">voir / supprimer</a></td></tr>
+{% endfor %}</tbody></table>
+{% endif %}
+
+<h2>Import Wikidata</h2>
+{% include "admin/_import_status.html" %}
+<p><a href="/admin/plats">Lancer un import depuis la page Plats</a> · <a href="/admin/export.xlsx">Télécharger l'export Excel</a></p>
+{% endblock %}

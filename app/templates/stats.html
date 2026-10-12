@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Statistiques — plats.hosh.it{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Statistiques</h1>
+  <div class="tiles">
+    <div class="tile"><span class="tile-num">{{ s.answers | num }}</span><span>réponses</span></div>
+    <div class="tile"><span class="tile-num">{{ s.participants | num }}</span><span>participant·es</span></div>
+    <div class="tile"><span class="tile-num">{{ s.dishes | num }}</span><span>plats</span></div>
+    <div class="tile"><span class="tile-num">{{ s.skips | num }}</span><span>« je ne connais pas »</span></div>
+  </div>
+
+  <h2>Combien de temps pour tout classer ?</h2>
+  <ul class="coverage">
+  {% for c in s.coverage %}
+    <li>
+      <span class="dist-label">≥ {{ c.threshold }} réponse{{ 's' if c.threshold > 1 }}</span>
+      <span class="dist-track"><span class="bar bar-accent" data-pct="{{ c.pct }}"></span></span>
+      <span class="dist-num">{{ c.count | num }} / {{ s.dishes | num }} · {{ c.pct }} %</span>
+    </li>
+  {% endfor %}
+  </ul>
+
+  <h2>Les catégories</h2>
+  <table class="table">
+    <thead><tr><th scope="col">Catégorie</th><th scope="col">Réponses</th><th scope="col">Part</th><th scope="col">Plats en tête</th></tr></thead>
+    <tbody>
+    {% for row in s.leaderboard %}
+      <tr><td><span class="chip cat-{{ row.cat.slug }}">{{ row.cat.emoji }} {{ row.cat.name }}</span></td>
+        <td>{{ row.votes | num }}</td><td>{{ row.pct }} %</td><td>{{ row.top | num }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="two-cols">
+    <div>
+      <h2>Les plus consensuels</h2>
+      <ol class="rank">
+      {% for e in s.consensual %}
+        <li><a href="/plat/{{ e.dish.slug }}">{{ e.dish.title }}</a>
+          <span class="chip cat-{{ e.top.slug }}">{{ e.top.emoji }} {{ (e.top_share * 100) | round | int }} %</span>
+          <span class="muted">{{ e.total }} rép.</span></li>
+      {% else %}<li class="muted">Pas encore assez de réponses.</li>{% endfor %}
+      </ol>
+    </div>
+    <div>
+      <h2>Les plus disputés</h2>
+      <ol class="rank">
+      {% for e in s.contested %}
+        <li><a href="/plat/{{ e.dish.slug }}">{{ e.dish.title }}</a>
+          <span class="muted">dispersion {{ (e.entropy * 100) | round | int }} % · {{ e.total }} rép.</span></li>
+      {% else %}<li class="muted">Pas encore assez de réponses.</li>{% endfor %}
+      </ol>
+    </div>
+  </div>
+
+  <h2>Réponses par jour <span class="muted">(60 derniers jours, UTC)</span></h2>
+  {% if s.per_day %}
+  <ol class="per-day" aria-label="Réponses par jour">
+  {% for d in s.per_day %}
+    <li title="{{ d.day }} : {{ d.n }}"><span class="bar bar-accent" data-hpct="{{ d.pct }}"></span><span class="sr-only">{{ d.day }} : {{ d.n }} réponses</span></li>
+  {% endfor %}
+  </ol>
+  <p class="muted">Du {{ s.per_day[0].day }} au {{ s.per_day[-1].day }} · pic : {{ s.per_day | map(attribute='n') | max }} réponses.</p>
+  {% else %}<p class="muted">Pas encore de réponses.</p>{% endif %}
+  <p class="muted">Aucune donnée individuelle n'est publiée : seulement des totaux.</p>
+</section>
+{% endblock %}

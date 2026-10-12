@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+{% block title %}Catégories{% endblock %}
+{% block content %}
+<h1>Catégories</h1>
+<p class="muted">Une catégorie qui a des réponses ne peut pas être supprimée : désactivez-la (elle disparaît du jeu, ses réponses restent).</p>
+<table class="table">
+  <thead><tr><th>Slug</th><th>Nom</th><th>Couleur</th><th>Emoji</th><th>Ordre</th><th>Active</th><th>Réponses</th><th></th></tr></thead>
+  <tbody>
+  {% for c in rows %}
+  <tr>
+    <td><span class="chip cat-{{ c.slug }}">{{ c.slug }}</span></td>
+    <td><input name="name" value="{{ c.name }}" form="cat-{{ c.id }}" required maxlength="40" aria-label="Nom"></td>
+    <td><input type="color" name="color" value="{{ c.color | lower }}" form="cat-{{ c.id }}" aria-label="Couleur"></td>
+    <td><input name="emoji" value="{{ c.emoji }}" form="cat-{{ c.id }}" size="3" maxlength="8" aria-label="Emoji"></td>
+    <td><input type="number" name="position" value="{{ c.position }}" form="cat-{{ c.id }}" class="num" aria-label="Ordre"></td>
+    <td><input type="checkbox" name="active" value="1" form="cat-{{ c.id }}"{% if c.active %} checked{% endif %} aria-label="Active"></td>
+    <td>{{ c.n }}</td>
+    <td>
+      <form method="post" action="/admin/categories" id="cat-{{ c.id }}" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="id" value="{{ c.id }}">
+        <button name="action" value="update" class="btn">Enregistrer</button>
+        {% if not c.n %}<button name="action" value="delete" class="btn btn-danger" data-confirm="Supprimer cette catégorie ?">Supprimer</button>{% endif %}
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="card">
+  <h2>Nouvelle catégorie</h2>
+  <form method="post" action="/admin/categories">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="create">
+    <label>Nom <input name="name" required maxlength="40"></label>
+    <label>Slug (facultatif) <input name="slug" maxlength="30" pattern="[a-z0-9-]*"></label>
+    <label>Couleur <input type="color" name="color" value="#777777"></label>
+    <label>Emoji <input name="emoji" maxlength="8" size="3"></label>
+    <label>Ordre <input type="number" name="position" value="{{ rows | length + 1 }}" class="num"></label>
+    <button type="submit" class="btn">Ajouter</button>
+  </form>
+</section>
+{% endblock %}

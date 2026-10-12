@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}Admin{% endblock %} — plats.hosh.it</title>
+<link rel="stylesheet" href="/static/style.css?v={{ version }}">
+<link rel="stylesheet" href="/static/admin.css?v={{ version }}">
+<link rel="stylesheet" href="/categories.css">
+<script src="/static/admin.js?v={{ version }}" defer></script>
+</head>
+<body class="admin">
+<header class="site-header">
+  <a class="brand" href="/admin">plats<span> admin</span></a>
+  {% if csrf %}
+  <nav aria-label="Administration">
+    <a href="/admin">Tableau de bord</a>
+    <a href="/admin/plats">Plats</a>
+    <a href="/admin/propositions">Propositions</a>
+    <a href="/admin/votes">Réponses</a>
+    <a href="/admin/categories">Catégories</a>
+    <a href="/admin/mots">Mots interdits</a>
+    <a href="/admin/reglages">Réglages</a>
+    <a href="/admin/export.xlsx">Export .xlsx</a>
+    <a href="/admin/journal">Journal</a>
+    <form method="post" action="/admin/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="linklike">Déconnexion</button>
+    </form>
+  </nav>
+  {% endif %}
+</header>
+<main id="main" class="admin-main">
+  {% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
+  {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

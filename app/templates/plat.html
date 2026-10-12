@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ dish.title }} — plats.hosh.it{% endblock %}
+{% block content %}
+<article class="panel dish-page">
+  {% if dish.image %}
+  <figure class="dish-img">
+    <img src="{{ dish.image }}" alt="{{ dish.title }}" width="480" height="320">
+    <figcaption>Image : {{ dish.image_author }} — {% if dish.image_license_url %}<a href="{{ dish.image_license_url }}" rel="noopener">{{ dish.image_license }}</a>{% else %}{{ dish.image_license }}{% endif %}{% if dish.image_source_url %} (<a href="{{ dish.image_source_url }}" rel="noopener">source</a>){% endif %}</figcaption>
+  </figure>
+  {% endif %}
+  <h1>{{ dish.title }}</h1>
+  {% if dish.description %}<p class="dish-desc">{{ dish.description }}</p>{% endif %}
+  {% if dish.region %}<p class="dish-region">{{ dish.region }}</p>{% endif %}
+
+  <h2>Ce que les gens en pensent</h2>
+  <p><strong>{{ dist.total }}</strong> réponse{{ 's' if dist.total != 1 }}{% if dist.skips %} · {{ dist.skips }} personne{{ 's' if dist.skips != 1 }} ne le connai{{ 'ssent' if dist.skips != 1 else 't' }} pas{% endif %}
+    · <span class="consensus">{{ dist.label }}</span>{% if dist.total >= 3 %}
+    <span class="muted">(catégorie en tête : {{ (dist.top_share * 100) | round | int }} % ; dispersion {{ (dist.entropy * 100) | round | int }} %)</span>{% endif %}</p>
+  <ul class="dist">
+  {% for r in dist.rows %}
+    <li class="cat-{{ r.slug }}{% if mine and mine.category_id == r.id %} mine{% endif %}">
+      <span class="dist-label">{{ r.emoji }} {{ r.name }}{% if mine and mine.category_id == r.id %} <em>(votre réponse)</em>{% endif %}</span>
+      <span class="dist-track"><span class="bar" data-pct="{{ r.pct }}"></span></span>
+      <span class="dist-num">{{ r.count }} · {{ r.pct }} %</span>
+    </li>
+  {% endfor %}
+  </ul>
+
+  <p class="source muted">Source :
+    {% if dish.source == 'wikidata' %}Wikidata (CC0){% elif dish.source == 'user' %}proposé par un·e participant·e{% else %}ajouté par l'équipe{% endif %}
+    {% if dish.wiki_url %} · <a href="{{ dish.wiki_url }}" rel="noopener">article Wikipédia</a>{% endif %}
+  </p>
+  <p><a class="btn" href="/">Jouer</a> <a class="btn btn-secondary" href="/plats">Tous les plats</a></p>
+</article>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% set st = import_status %}
+{% if not st %}<p class="muted">Aucun import lancé pour l'instant.</p>
+{% elif st.state == 'running' %}<p class="flash">Import en cours depuis {{ st.started | dt }}{% if st.progress %} — {{ st.progress }}{% endif %}…</p>
+{% elif st.state == 'error' %}<p class="alert">Dernier import en échec ({{ st.finished | dt }}) : {{ st.error }}</p>
+{% else %}<p>Dernier import : {{ st.finished | dt }} —
+  {% for k, v in (st.summary or {}).items() %}{{ k }} {{ v }}{{ ', ' if not loop.last }}{% endfor %}</p>
+{% endif %}

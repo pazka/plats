@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ dish.title }}{% endblock %}
+{% block content %}
+<p><a href="/admin/plats">← Plats</a></p>
+<h1>{{ dish.title }} <span class="tag tag-{{ dish.status }}">{{ dish.status }}</span></h1>
+<p class="muted">#{{ dish.id }} · {{ dish.source }}{% if dish.qid %} · <a href="https://www.wikidata.org/wiki/{{ dish.qid }}" rel="noopener">{{ dish.qid }}</a>{% endif %}
+  · créé le {{ dish.created_at | dt }}{% if dish.admin_edited %} · modifié à la main (l'import ne l'écrase plus){% endif %}
+  {% if dish.status == 'active' %} · <a href="/plat/{{ dish.slug }}">page publique</a>{% endif %}</p>
+{% if dish.flag_reason %}<p class="alert">{{ dish.flag_reason }}</p>{% endif %}
+{% if merged_into %}<p>Fusionné dans <a href="/admin/plats/{{ merged_into.id }}">{{ merged_into.title }}</a>.</p>{% endif %}
+
+<form method="post" action="/admin/plats/{{ dish.id }}" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Titre <input name="title" value="{{ dish.title }}" required minlength="2" maxlength="120"></label>
+  <label>Description <textarea name="description" rows="5" maxlength="1000">{{ dish.description }}</textarea></label>
+  <label>Région / origine <input name="region" value="{{ dish.region }}" maxlength="80"></label>
+  <label>Statut
+    <select name="status">
+      {% for s in statuses %}{% if s != 'merged' or dish.status == 'merged' %}<option value="{{ s }}"{% if s == dish.status %} selected{% endif %}>{{ s }}</option>{% endif %}{% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="btn">Enregistrer</button>
+</form>
+
+<h2>Réponses ({{ dist.total }}, {{ dist.skips }} « je ne connais pas »)</h2>
+<ul class="dist">
+{% for r in dist.rows %}
+  <li class="cat-{{ r.slug }}"><span class="dist-label">{{ r.emoji }} {{ r.name }}</span>
+    <span class="dist-track"><span class="bar" data-pct="{{ r.pct }}"></span></span>
+    <span class="dist-num">{{ r.count }} · {{ r.pct }} %</span></li>
+{% endfor %}
+</ul>
+<p><a href="/admin/votes?plat={{ dish.id }}">Voir ses réponses</a></p>
+
+<h2>Fusionner ce plat dans un autre</h2>
+{% if similar %}<p class="muted">Ressemblants : {% for s in similar %}<a href="/admin/plats/{{ s.id }}">{{ s.title }}</a> (#{{ s.id }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+<form method="post" action="/admin/plats/fusion" class="inline-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="source" value="{{ dish.id }}">
+  <input type="hidden" name="return_to" value="/admin/plats/{{ dish.id }}">
+  <label>Cible (id ou slug) <input name="target" required></label>
+  <button type="submit" class="btn" data-confirm="Fusionner ce plat dans la cible ?">Fusionner</button>
+</form>
+{% endblock %}
