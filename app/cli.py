@@ -30,8 +30,12 @@ def cmd_import(args) -> int:
     setup_logging()
     settings = load_settings()
     db.migrate(settings.db_path)
-    summary = importer.run_logged(settings.db_path, settings.images_dir, enrich=not args.no_enrich,
-                                  images=args.images, actor="cli")
+    try:
+        summary = importer.run_logged(settings.db_path, settings.images_dir, enrich=not args.no_enrich,
+                                      images=args.images, actor="cli")
+    except Exception as exc:  # noqa: BLE001 - details are in the JSON log line above
+        print(json.dumps({"event": "import_failed", "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
+        return 1
     print(json.dumps(summary, ensure_ascii=False))
     return 0
 

@@ -18,7 +18,7 @@ def form_token(client):
 def propose(client, nom, description, region="", decision="", pow_ok=True, honeypot="", token=None):
     token = token or form_token(client)
     data = {"form_token": token, "nom": nom, "description": description, "region": region,
-            "pow_nonce": security.solve_pow(token, 8) if pow_ok else "1", "website": honeypot}
+            "pow_nonce": security.solve_pow(token, 8) if pow_ok else "not-a-nonce", "website": honeypot}
     if decision:
         data["decision"] = decision
     return client.post("/proposer", data=data)

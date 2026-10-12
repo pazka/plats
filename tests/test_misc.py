@@ -118,3 +118,12 @@ def test_stats_page(client, conn, dishes):
                      (dishes[0], f"visitor-{i}-xxxxxx", 6))
     html = client.get("/stats").text
     assert "Quiche lorraine" in html and "Les plus consensuels" in html
+
+
+def test_head_requests_answered_like_get(app):
+    from fastapi.testclient import TestClient
+    from app.main import HeadAsGet
+    c = TestClient(HeadAsGet(app), base_url="https://testserver")
+    r = c.head("/")
+    assert r.status_code == 200 and r.content == b"" and "content-security-policy" in r.headers
+    assert c.head("/healthz").status_code == 200

@@ -256,7 +256,8 @@ def run_logged(db_path: Path, images_dir: Path, *, enrich: bool, images: bool,
                     progress=lambda n, total: status(state="running", started=started, actor=actor,
                                                      progress=f"{n}/{total}"))
         except Exception as exc:  # noqa: BLE001 - reported to the admin
-            log.exception("wikidata import failed")
+            log.error(json.dumps({"event": "import_failed", "message": "wikidata import failed",
+                                  "error": f"{type(exc).__name__}: {exc}"[:500]}))
             status(state="error", started=started, finished=int(time.time()), error=str(exc)[:500])
             db.audit(conn, "import_wikidata_failed", str(exc)[:500])
             raise

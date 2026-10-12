@@ -100,7 +100,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def run() -> FastAPI:  # uvicorn factory entrypoint: `uvicorn --factory app.main:run`
+class HeadAsGet:
+    """Serve HEAD like GET (uptime monitors, `curl -I`); the server drops the body for HEAD."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "HEAD":
+            scope = dict(scope, method="GET")
+
+            async def send_no_body(message):
+                if message["type"] == "http.response.body":
+                    message = {**message, "body": b""}
+                await send(message)
+
+            return await self.app(scope, receive, send_no_body)
+        return await self.app(scope, receive, send)
+
+
+def run():  # uvicorn factory entrypoint: `uvicorn --factory app.main:run`
     setup_logging()
-    return create_app()
+    return HeadAsGet(create_app())
 
