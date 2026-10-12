@@ -1,13 +1,12 @@
-# Example deployment behind Traefik (no secrets here). Copy to docker-compose.yml on the server.
-#   1. scripts/set-admin.sh ./plats.env       (interactive: admin password + TOTP)
-#   2. docker compose up -d
-#   3. docker compose exec plats python scripts/import_wikidata.py   (or the button in /admin/plats)
+# Deployment behind Traefik (no secrets here). scripts/deploy.sh copies it to docker-compose.yml.
+# Every site-specific value comes from plats.env, used both for interpolation and by the container:
+#   docker compose --env-file plats.env up -d          (scripts/deploy.sh does this for you)
 services:
   plats:
-    image: ghcr.io/pazka/plats:v0.1.0
+    image: ${PLATS_IMAGE:-ghcr.io/pazka/plats:v0.1.1}
     container_name: plats
     restart: unless-stopped
-    env_file: ./plats.env          # chmod 600; see .env.example
+    env_file: ${PLATS_ENV_FILE:-./plats.env}   # chmod 600; see .env.example
     volumes:
       - plats-data:/data           # SQLite DB (+WAL), cached images, generated secrets
     # --- hardening ---
@@ -34,10 +33,11 @@ services:
     networks: [traefik]
     labels:
       - traefik.enable=true
-      - traefik.docker.network=traefik
-      - traefik.http.routers.plats.rule=Host(`plats.hosh.it`)
-      - traefik.http.routers.plats.entrypoints=websecure
-      - traefik.http.routers.plats.tls.certresolver=letsencrypt
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.routers.plats.rule=Host(`${PLATS_HOST:-plats.hosh.it}`)
+      - traefik.http.routers.plats.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.plats.tls=true
+      - traefik.http.routers.plats.tls.certresolver=${TRAEFIK_CERTRESOLVER-letsencrypt}
       - traefik.http.services.plats.loadbalancer.server.port=8000
       # HSTS is set by Traefik (the app sets CSP and the other security headers itself).
       - traefik.http.middlewares.plats-hsts.headers.stsSeconds=31536000
@@ -49,4 +49,5 @@ volumes:
 
 networks:
   traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
     external: true

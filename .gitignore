@@ -10,3 +10,9 @@ __pycache__/
 exports/
 *.xlsx
 .sandbox-ca.crt
+e2e/out/
+plats.env
+*.env
+!.env.example
+docker-compose.yml
+node_modules/
