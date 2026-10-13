@@ -6,7 +6,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
-from . import db, security, services
+from . import colors, db, security, services
 from .rewards import reward
 from .web import get_conn, rate_ok, security_event
 
@@ -243,20 +243,11 @@ def about(request: Request):
 def categories_css(conn=Depends(get_conn)):
     lines = []
     for c in services.categories(conn, active_only=False):
-        color = c["color"] if re.fullmatch(r"#[0-9A-Fa-f]{6}", c["color"] or "") else "#888888"
-        lines.append(f".cat-{c['slug']}{{--cat:{color};--cat-fg:{_text_color(color)}}}")
+        color = c["color"].upper() if re.fullmatch(r"#[0-9A-Fa-f]{6}", c["color"] or "") else "#D9D9D9"
+        ink, edge = colors.derived(color)
+        lines.append(f".cat-{c['slug']}{{--cat:{color};--cat-fg:{ink};--cat-edge:{edge}}}")
     return Response("\n".join(lines) + "\n", media_type="text/css",
                     headers={"Cache-Control": "public, max-age=60"})
-
-
-def _text_color(hex_color: str) -> str:
-    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
-
-    def lin(c):
-        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-
-    lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-    return "#000000" if lum > 0.179 else "#ffffff"
 
 
 @router.get("/media/{name}")

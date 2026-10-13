@@ -15,6 +15,12 @@ CATEGORIES = [
     ("salade", "Salade", "#44AA99", "🥗"),
 ]
 
+# Migration 3 (v0.3.0): owner asked for neutral pastels with some art direction. "Grocery labels":
+# same OKLCH lightness + chroma for every category, hues 36° apart (app/colors.py palette(10)),
+# so no answer looks more inviting than another; ink and border are derived in the same hue.
+PASTEL_SLUGS = ["ingredient", "pain", "puree", "soupe", "sandwich", "tarte", "gratin", "ragout", "salade",
+                "saucisse"]
+
 # Added by migration 2 (v0.2.0). Okabe-Ito vermillion: distinct from the 9 muted colours above.
 CATEGORY_SAUCISSE = ("saucisse", "Saucisse", "#D55E00", "🌭")
 

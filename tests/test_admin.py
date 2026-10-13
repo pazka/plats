@@ -214,6 +214,16 @@ def test_category_page_has_typed_color_field(admin):
     assert 'type="color" name="color"' not in html
 
 
+def test_category_pastel_button_recolours_all(admin, conn):
+    from app import colors
+    conn.execute("UPDATE categories SET color = '#FFFFFF'")
+    r = admin.post("/admin/categories", data={"csrf": csrf(admin), "action": "pastel"}, follow_redirects=False)
+    assert "ok=" in r.headers["location"]
+    got = [r[0] for r in conn.execute("SELECT color FROM categories ORDER BY position, id")]
+    assert got == colors.palette(len(got))
+    assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='category_pastel'").fetchone()[0] == 1
+
+
 def test_submission_queue_approve(admin, conn):
     from app import services
     did = services.create_dish(conn, title="Plat en attente", description="x" * 30, source="user", status="pending")

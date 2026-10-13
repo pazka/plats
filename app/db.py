@@ -155,10 +155,18 @@ def _add_saucisse_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+def _pastel_v3(conn: sqlite3.Connection) -> None:
+    """Owner request after v0.2.3: neutral pastel palette for the categories."""
+    from .colors import palette
+    for slug, color in zip(seed_data.PASTEL_SLUGS, palette(len(seed_data.PASTEL_SLUGS))):
+        conn.execute("UPDATE categories SET color = ? WHERE slug = ?", (color, slug))
+
+
 # Each migration: (version, sql, python hook or None). Never edit a released migration.
 MIGRATIONS = [
     (1, SCHEMA_V1, _seed_v1),
     (2, "", _add_saucisse_v2),
+    (3, "", _pastel_v3),
 ]
 
 

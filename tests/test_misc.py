@@ -27,7 +27,7 @@ def test_no_external_resources_in_pages(client, dishes):
 
 def test_healthz(client):
     body = client.get("/healthz").json()
-    assert body["status"] == "ok" and body["categories"] == 10 and body["schema"] == 2
+    assert body["status"] == "ok" and body["categories"] == 10 and body["schema"] == 3
 
 
 def test_xff_trusted_only_from_proxy(app, conn, dishes, no_think):
@@ -140,8 +140,8 @@ def test_migration_2_adds_saucisse_once(tmp_path):
         assert db.migrate(path) == 1
     finally:
         db.MIGRATIONS[:] = saved
-    assert db.migrate(path) == 2
-    assert db.migrate(path) == 2  # idempotent
+    assert db.migrate(path) == 3
+    assert db.migrate(path) == 3  # idempotent
     c = sqlite3.connect(path)
     rows = c.execute("SELECT slug, name, position, active FROM categories ORDER BY position").fetchall()
     assert len(rows) == 10 and rows[-1] == ("saucisse", "Saucisse", 10, 1)
@@ -182,3 +182,37 @@ def test_answer_buttons_have_no_emoji(client, dishes):
     for _, name, _, emoji in seed_data.CATEGORIES + [seed_data.CATEGORY_SAUCISSE]:
         assert emoji not in form and name in form
     assert not re.search(r'class="emoji"', form)
+
+
+def test_pastel_palette_is_neutral_and_readable():
+    from app import colors
+    p = colors.palette(10)
+    assert len(set(p)) == 10
+    for c in p:
+        L, C, _ = colors.hex_to_oklch(c)
+        assert abs(L - colors.PASTEL_L) < 0.006 and abs(C - colors.PASTEL_C) < 0.006, c  # same weight for all
+        ink, edge = colors.derived(c)
+        assert colors.contrast(ink, c) >= 7, c  # WCAG AAA on the answer buttons
+    hues = sorted(colors.hex_to_oklch(c)[2] for c in p)
+    gaps = [(b - a) for a, b in zip(hues, hues[1:] + [hues[0] + 360])]
+    assert min(gaps) > 30  # hues spread evenly: distinguishable
+    # consecutive buttons are far apart on the wheel
+    for a, b in zip(p, p[1:]):
+        d = abs(colors.hex_to_oklch(a)[2] - colors.hex_to_oklch(b)[2]) % 360
+        assert min(d, 360 - d) >= 90
+
+
+def test_derived_colours_stay_readable_for_any_custom_colour():
+    from app import colors
+    for c in ("#FFFFFF", "#000000", "#FFFF00", "#0000FF", "#777777", "#D55E00", "#882255", "#12AB34"):
+        ink, _ = colors.derived(c)
+        assert colors.contrast(ink, c) >= 4.5, c
+
+
+def test_migration_applies_pastels_and_css_exposes_ink(client, conn):
+    from app import colors, seed_data
+    got = dict(conn.execute("SELECT slug, color FROM categories").fetchall())
+    for slug, c in zip(seed_data.PASTEL_SLUGS, colors.palette(10)):
+        assert got[slug] == c
+    css = client.get("/categories.css").text
+    assert "--cat-fg:" in css and "--cat-edge:" in css and ".cat-saucisse{" in css

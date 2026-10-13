@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import auth, db, export, importer, services
+from . import auth, colors, db, export, importer, services
 from .ratelimit import parse_rules, validate_rules
 from .text import moderation_norm, slugify, title_norm
 from .web import get_conn, security_event
@@ -436,7 +436,9 @@ def categories_page(request: Request, conn=Depends(require_admin)):
     rows = conn.execute(
         "SELECT c.*, (SELECT COUNT(*) FROM votes v WHERE v.category_id = c.id) AS n FROM categories c"
         " ORDER BY position, id").fetchall()
-    return page(request, "categories.html", {"rows": rows})
+    # a new category gets a pastel hue far from the existing ones (golden angle)
+    new_color = colors.pastel(25 + 137.508 * len(rows))
+    return page(request, "categories.html", {"rows": rows, "new_color": new_color})
 
 
 @router.post("/categories")
@@ -466,6 +468,11 @@ async def categories_save(request: Request, deps=Depends(admin_form)):
             conn.execute("UPDATE categories SET name = ?, color = ?, emoji = ?, position = ?, active = ? WHERE id = ?",
                          (name, color, emoji, position, active, cid))
             audit(request, conn, "category_update", {"id": cid, "name": name, "color": color, "active": active})
+        elif action == "pastel":
+            ids = [r["id"] for r in conn.execute("SELECT id FROM categories ORDER BY position, id")]
+            for cid, c in zip(ids, colors.palette(len(ids))):
+                conn.execute("UPDATE categories SET color = ? WHERE id = ?", (c, cid))
+            audit(request, conn, "category_pastel", {"n": len(ids)})
         elif action == "delete":
             cid = int(form.get("id", 0))
             if conn.execute("SELECT 1 FROM votes WHERE category_id = ? LIMIT 1", (cid,)).fetchone():

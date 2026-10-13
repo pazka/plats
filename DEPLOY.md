@@ -232,6 +232,13 @@ strips quotes itself if the file is used with `docker run --env-file`.
     `deploy/traefik-route.yml.tmpl` into the edge's dynamic directory after the container is healthy
     and checks the router through the Traefik API. The label setup is kept as
     `docker-compose.labels.yml` (`PLATS_ROUTING=labels`) for when the edge moves to the docker provider.
+33. **Pastel "grocery label" categories** (owner request, after v0.2.3): colour must not steer the
+    answer, so every category has the **same OKLCH lightness and chroma** (L 0.88, C 0.058), hues
+    36° apart, neighbours far apart on the wheel (`app/colors.py`). Text is a deep ink of the same
+    hue (≥ 7:1, WCAG AAA), border/shadow/bars a mid tone of it, all derived in `/categories.css`
+    from the one stored colour, so a custom colour stays readable too. **Migration 3** recolours
+    the ten known categories on upgrade (this replaces any colour set by hand); Admin →
+    Catégories has a « Palette pastel pour toutes » button to re-apply it in display order.
 
 ## 6. How it was verified
 

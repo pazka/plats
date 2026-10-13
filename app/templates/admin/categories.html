@@ -3,6 +3,12 @@
 {% block content %}
 <h1>Catégories</h1>
 <p class="muted">Une catégorie qui a des réponses ne peut pas être supprimée : désactivez-la (elle disparaît du jeu, ses réponses restent).</p>
+<form method="post" action="/admin/categories" class="inline-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button name="action" value="pastel" class="btn btn-secondary"
+          data-confirm="Remplacer la couleur de toutes les catégories par la palette pastel ?">Palette pastel pour toutes</button>
+  <span class="muted">Même clarté et même saturation pour chaque catégorie (aucune ne ressort), teintes réparties dans l'ordre affiché.</span>
+</form>
 <div class="table-scroll">
 <table class="table">
   <thead><tr><th>Slug</th><th>Nom</th><th>Couleur</th><th>Emoji</th><th>Ordre</th><th>Active</th><th>Réponses</th><th></th></tr></thead>
@@ -38,8 +44,8 @@
     <input type="hidden" name="action" value="create">
     <label>Nom <input name="name" required maxlength="40"></label>
     <label>Slug (facultatif) <input name="slug" maxlength="30" pattern="[a-z0-9-]*"></label>
-    <label>Couleur <span class="color-cell"><input type="color" value="#777777" data-color-for="color-new" aria-label="Couleur (sélecteur)">
-      <input name="color" id="color-new" value="#777777" class="hex" required maxlength="7"
+    <label>Couleur <span class="color-cell"><input type="color" value="{{ new_color | lower }}" data-color-for="color-new" aria-label="Couleur (sélecteur)">
+      <input name="color" id="color-new" value="{{ new_color }}" class="hex" required maxlength="7"
              pattern="#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})" spellcheck="false" aria-label="Couleur (#RRGGBB)"></span></label>
     <label>Emoji <input name="emoji" maxlength="8" size="3"></label>
     <label>Ordre <input type="number" name="position" value="{{ rows | length + 1 }}" class="num"></label>
