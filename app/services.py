@@ -88,8 +88,26 @@ def dish_public(dish: sqlite3.Row) -> dict:
         "image_license_url": dish["image_license_url"],
         "image_source_url": dish["image_source_url"],
         "wiki_url": dish["wiki_url"],
+        "recipe_url": dish["recipe_url"],
         "source": dish["source"],
+        **learn_more(dish),
     }
+
+
+SOURCE_LABELS = {"cuisine-facile": "cuisine-facile.com", "elle": "Elle à Table", "wikipedia": "Wikipédia",
+                 "wikidata": "Wikipédia"}
+
+
+def learn_more(dish) -> dict:
+    """The outbound link of a dish card (opened in a new tab): the recipe when a source has one,
+    else the Wikipédia article."""
+    if dish["recipe_url"]:
+        host = dish["recipe_url"].split("/")[2] if dish["recipe_url"].count("/") >= 2 else ""
+        label = SOURCE_LABELS.get(dish["source"]) or host.removeprefix("www.")
+        return {"link_url": dish["recipe_url"], "link_label": f"Voir la recette ({label})"}
+    if dish["wiki_url"]:
+        return {"link_url": dish["wiki_url"], "link_label": "En savoir plus (Wikipédia)"}
+    return {"link_url": "", "link_label": ""}
 
 
 # ------------------------------------------------------------------ votes
@@ -377,14 +395,17 @@ def moderation_hits(conn, *texts: str) -> list[str]:
 def create_dish(conn, *, title: str, description: str, region: str = "", source: str,
                 status: str = "active", qid: str | None = None, wiki_url: str = "",
                 submitter_visitor: str | None = None, submitter_ip_hash: str | None = None,
-                flag_reason: str = "") -> int:
+                flag_reason: str = "", source_key: str | None = None, recipe_url: str = "",
+                source_text: str = "") -> int:
     now = int(time.time())
     cur = conn.execute(
         "INSERT INTO dishes(slug, title, title_norm, description, region, source, qid, wiki_url, status,"
-        " flag_reason, submitter_visitor, submitter_ip_hash, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " flag_reason, submitter_visitor, submitter_ip_hash, source_key, recipe_url, source_text,"
+        " created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (unique_slug(conn, title), title, title_norm(title), description, region, source, qid, wiki_url,
-         status, flag_reason, submitter_visitor, submitter_ip_hash, now, now),
+         status, flag_reason, submitter_visitor, submitter_ip_hash, source_key, recipe_url, source_text,
+         now, now),
     )
     return cur.lastrowid
 

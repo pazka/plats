@@ -155,10 +155,88 @@ def _add_saucisse_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+DISHES_V3 = """
+CREATE TABLE dishes_v3 (
+    id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    title_norm TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL CHECK (source <> ''),
+    qid TEXT UNIQUE,
+    source_key TEXT UNIQUE,
+    wiki_url TEXT NOT NULL DEFAULT '',
+    recipe_url TEXT NOT NULL DEFAULT '',
+    source_text TEXT NOT NULL DEFAULT '',
+    image_path TEXT NOT NULL DEFAULT '',
+    image_author TEXT NOT NULL DEFAULT '',
+    image_license TEXT NOT NULL DEFAULT '',
+    image_license_url TEXT NOT NULL DEFAULT '',
+    image_source_url TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'hidden', 'pending', 'flagged', 'rejected', 'merged', 'review')),
+    flag_reason TEXT NOT NULL DEFAULT '',
+    merged_into INTEGER REFERENCES dishes(id),
+    admin_edited INTEGER NOT NULL DEFAULT 0,
+    submitter_visitor TEXT,
+    submitter_ip_hash TEXT,
+    review_kind TEXT NOT NULL DEFAULT '',
+    review_verdict TEXT NOT NULL DEFAULT '',
+    review_reason TEXT NOT NULL DEFAULT '',
+    review_model TEXT NOT NULL DEFAULT '',
+    reviewed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+"""
+_DISHES_V1_COLUMNS = (
+    "id, slug, title, title_norm, description, region, source, qid, wiki_url, image_path, image_author,"
+    " image_license, image_license_url, image_source_url, status, flag_reason, merged_into, admin_edited,"
+    " submitter_visitor, submitter_ip_hash, created_at, updated_at"
+)
+
+
+def _sources_reviews_v3(conn: sqlite3.Connection) -> None:
+    """More dish sources (cuisine-facile, Wikipédia, Elle…), a recipe link per dish, the
+    'review' status (scraped, waiting for the reviewers) and the reviewers' verdict.
+    SQLite cannot change a CHECK constraint in place: the table is rebuilt (foreign keys are
+    off during migrations, `foreign_key_check` runs before the commit)."""
+    for statement in _split_sql(DISHES_V3):
+        conn.execute(statement)
+    conn.execute(f"INSERT INTO dishes_v3 ({_DISHES_V1_COLUMNS}) SELECT {_DISHES_V1_COLUMNS} FROM dishes")
+    conn.execute("DROP TABLE dishes")  # also drops its indexes and the FTS triggers
+    conn.execute("ALTER TABLE dishes_v3 RENAME TO dishes")
+    for statement in _split_sql(DISHES_INDEXES_AND_TRIGGERS):
+        conn.execute(statement)
+    conn.execute("INSERT INTO dishes_fts(dishes_fts) VALUES ('rebuild')")
+
+
+DISHES_INDEXES_AND_TRIGGERS = """
+CREATE INDEX dishes_status ON dishes(status);
+CREATE INDEX dishes_source ON dishes(source);
+CREATE TRIGGER dishes_ai AFTER INSERT ON dishes BEGIN
+    INSERT INTO dishes_fts(rowid, title, description, region)
+    VALUES (new.id, new.title, new.description, new.region);
+END;
+CREATE TRIGGER dishes_ad AFTER DELETE ON dishes BEGIN
+    INSERT INTO dishes_fts(dishes_fts, rowid, title, description, region)
+    VALUES ('delete', old.id, old.title, old.description, old.region);
+END;
+CREATE TRIGGER dishes_au AFTER UPDATE OF title, description, region ON dishes BEGIN
+    INSERT INTO dishes_fts(dishes_fts, rowid, title, description, region)
+    VALUES ('delete', old.id, old.title, old.description, old.region);
+    INSERT INTO dishes_fts(rowid, title, description, region)
+    VALUES (new.id, new.title, new.description, new.region);
+END;
+"""
+
+
 # Each migration: (version, sql, python hook or None). Never edit a released migration.
 MIGRATIONS = [
     (1, SCHEMA_V1, _seed_v1),
     (2, "", _add_saucisse_v2),
+    (3, "", _sources_reviews_v3),
 ]
 
 
@@ -175,6 +253,8 @@ def migrate(db_path: Path | str) -> int:
     conn = connect(db_path)
     try:
         conn.execute("PRAGMA journal_mode = WAL")
+        # Off for table rebuilds (the documented SQLite procedure); checked before each commit.
+        conn.execute("PRAGMA foreign_keys = OFF")
         current = conn.execute("PRAGMA user_version").fetchone()[0]
         for version, sql, hook in MIGRATIONS:
             if version <= current:
@@ -185,6 +265,8 @@ def migrate(db_path: Path | str) -> int:
                     conn.execute(statement)
                 if hook:
                     hook(conn)
+                if conn.execute("PRAGMA foreign_key_check").fetchone():
+                    raise RuntimeError(f"migration {version}: foreign key check failed")
                 conn.execute(f"PRAGMA user_version = {int(version)}")
                 conn.execute("COMMIT")
             except Exception:

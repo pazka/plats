@@ -27,7 +27,7 @@ def test_no_external_resources_in_pages(client, dishes):
 
 def test_healthz(client):
     body = client.get("/healthz").json()
-    assert body["status"] == "ok" and body["categories"] == 10 and body["schema"] == 2
+    assert body["status"] == "ok" and body["categories"] == 10 and body["schema"] == 3
 
 
 def test_xff_trusted_only_from_proxy(app, conn, dishes, no_think):
@@ -140,8 +140,8 @@ def test_migration_2_adds_saucisse_once(tmp_path):
         assert db.migrate(path) == 1
     finally:
         db.MIGRATIONS[:] = saved
-    assert db.migrate(path) == 2
-    assert db.migrate(path) == 2  # idempotent
+    assert db.migrate(path) == 3
+    assert db.migrate(path) == 3  # idempotent
     c = sqlite3.connect(path)
     rows = c.execute("SELECT slug, name, position, active FROM categories ORDER BY position").fetchall()
     assert len(rows) == 10 and rows[-1] == ("saucisse", "Saucisse", 10, 1)
@@ -163,6 +163,36 @@ def test_migration_2_respects_an_admin_created_saucisse(tmp_path):
     c.commit()
     db.migrate(path)
     assert c.execute("SELECT name, active FROM categories WHERE slug='saucisse'").fetchall() == [("Saucisses", 0)]
+
+
+def test_migration_3_rebuilds_dishes_keeping_votes_and_search(tmp_path):
+    from app import db, services
+    path = tmp_path / "v2.sqlite3"
+    saved = db.MIGRATIONS[:]
+    try:
+        db.MIGRATIONS[:] = saved[:2]
+        assert db.migrate(path) == 2
+        c = db.connect(path)
+        ins = ("INSERT INTO dishes(slug, title, title_norm, description, source, qid, status, merged_into,"
+               " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,0,0)")
+        a = c.execute(ins, ("brie-de-meaux", "Brie de Meaux", "brie meaux", "Fromage à pâte molle.", "wikidata",
+                            "Q1", "active", None)).lastrowid
+        b = c.execute(ins, ("brie", "Brie", "brie", "Doublon.", "manual", None, "merged", a)).lastrowid
+        c.execute("INSERT INTO votes(dish_id, visitor_id, category_id, created_at) VALUES (?, 'v', 1, 0)", (a,))
+        c.close()
+    finally:
+        db.MIGRATIONS[:] = saved
+    assert db.migrate(path) == 3
+    c = db.connect(path)
+    rows = [tuple(r) for r in c.execute("SELECT id, qid, status, merged_into, recipe_url, review_verdict FROM dishes")]
+    assert rows == [(a, "Q1", "active", None, "", ""), (b, None, "merged", a, "", "")]
+    assert c.execute("SELECT COUNT(*) FROM votes WHERE dish_id = ?", (a,)).fetchone()[0] == 1
+    assert c.execute("SELECT rowid FROM dishes_fts WHERE dishes_fts MATCH 'meaux'").fetchone()[0] == a
+    assert c.execute("PRAGMA foreign_key_check").fetchall() == []
+    # new sources and the 'review' status are accepted; FTS triggers still work
+    d = services.create_dish(c, title="Tarte Tatin", description="Tarte renversée.", source="cuisine-facile",
+                             status="review")
+    assert c.execute("SELECT rowid FROM dishes_fts WHERE dishes_fts MATCH 'tatin'").fetchone()[0] == d
 
 
 def test_saucisse_is_playable_with_key_0(client, dishes, no_think):
