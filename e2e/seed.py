@@ -16,6 +16,8 @@ DISHES = [
 ]
 for i in range(35):
     DISHES.append((f"Spécialité test {i:02d}", f"Plat de test numéro {i}, décrit assez longuement pour la démonstration.", ""))
+RECIPES = {"Cassoulet": "https://cuisine-facile.com/viandes/recette-cassoulet.php"}  # never fetched by the test
 for title, desc, region in DISHES:
-    services.create_dish(conn, title=title, description=desc, region=region, source="manual")
+    services.create_dish(conn, title=title, description=desc, region=region, source="manual",
+                         recipe_url=RECIPES.get(title, ""))
 print("seeded", conn.execute("SELECT COUNT(*) FROM dishes").fetchone()[0])

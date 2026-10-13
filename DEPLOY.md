@@ -62,7 +62,7 @@ One file feeds both docker compose (interpolation) and the container.
 
 | Variable | Default (= hosh.it box) | Notes |
 |---|---|---|
-| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.2.4` | pin a release tag |
+| `PLATS_IMAGE` | `ghcr.io/pazka/plats:v0.3.0` | pin a release tag |
 | `PLATS_HOST` | `plats.hosh.it` | Traefik `Host()` rule and the external smoke check |
 | `PLATS_ROUTING` | `file` | `file` = loopback port + Traefik file-provider route; `labels` = `docker-compose.labels.yml` (docker provider, Traefik ≥ v3.7) |
 | `PLATS_BIND` | `127.0.0.1:9131` | loopback `host:port` published for Traefik (file mode); must be loopback |
@@ -88,15 +88,15 @@ strips quotes itself if the file is used with `docker run --env-file`.
 
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/plats:v0.2.4` (`:latest`, `:0.2`; each `main` commit: `:ci`, `:<sha>`) |
+| Image | `ghcr.io/pazka/plats:v0.3.0` (`:latest`, `:0.3`; each `main` commit: `:ci`, `:<sha>`) |
 | Process | uvicorn, 1 worker, port 8000 in the container, **published on `127.0.0.1:9131`** only |
 | Edge | `/root/hosh-deploy/edge/traefik/dynamic/plats.yml` (router `plats@file`, resolver `le`, HSTS middleware) |
 | User / FS | uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges` |
 | Volume | **`plats_plats-data`** → `/data`: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional). Under `/var/lib/docker/volumes`, so in the monthly restic golden backup |
-| Health | **`GET /healthz`** → `{"status":"ok","schema":2,"active_dishes":N,"categories":10}` (Docker healthcheck too); `HEAD` supported |
+| Health | **`GET /healthz`** → `{"status":"ok","schema":3,"active_dishes":N,"categories":10}` (Docker healthcheck too); `HEAD` supported |
 | Migrations | automatic at start |
 | Logs | JSON lines on stdout, `ip_hash` only (no raw IP); Traefik's access log covers the host for CrowdSec |
-| Outbound | only the importer: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
+| Outbound | only the importers: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`), `cuisine-facile.com` (sources import). Never Anthropic: the reviewers run outside the container (§4b) |
 
 ## 4. Operations
 
@@ -108,6 +108,65 @@ strips quotes itself if the file is used with `docker run --env-file`.
 - **Admin password / TOTP reset**: owner runs `scripts/set-admin.sh plats.env`, then `scripts/deploy.sh`.
 - **Tuning** (no restart): Admin → Réglages (rate limits, approval, PoW, anomaly thresholds).
 - **Abuse**: Admin → Tableau de bord (anomalies) → Réponses → bulk delete by visitor / IP hash.
+
+## 4b. Catalogue: more sources, reviewed by sandboxed `claude -p`
+
+Why: the Wikidata catalogue was too cheesy (each cheese its own "dish", trivially « Ingrédient »).
+v0.3.0 adds recipe sources and a review pass; the question card links to the recipe (new tab).
+
+**1. Import the sources** (in the container; new dishes enter as status `review`, not played yet;
+a title already in the catalogue only gets the recipe link; idempotent):
+```sh
+sudo docker compose --project-directory /srv/plats --env-file /srv/plats/plats.env exec -T plats \
+  python -m app.cli import-sources          # cuisine-facile.com « tradition » + Wikipédia categories
+```
+or Admin → Plats → « Recettes et Wikipédia ». **Elle à Table** blocks scripts (captcha): the owner saves
+<https://www.elle.fr/Elle-a-Table/Idees-de-menus/Gastronomie-francaise> from a browser
+(« Enregistrer sous… », HTML) and uploads it in that admin form (or `--elle-file page.html`).
+
+**2. Review** — by the **owner**, on a machine with Docker and an Anthropic credential, *not* in the
+plats container. Simplest: the owner's own computer with the admin download/upload buttons. On the box
+only inside an owner sudo window (it builds images and creates a docker network; the on-box Claude
+does not run it on its own). Command-line form:
+```sh
+sudo docker compose --project-directory /srv/plats --env-file /srv/plats/plats.env exec -T plats \
+  python -m app.cli review-export > /tmp/plats-candidates.jsonl      # or Admin → « Candidats à relire »
+export ANTHROPIC_API_KEY=…   # dedicated key, low spend limit (or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`)
+python3 scripts/review_dishes.py --self-test                          # once: proves the sandbox (13 checks)
+python3 scripts/review_dishes.py /tmp/plats-candidates.jsonl -o /tmp/plats-reviews.jsonl -j 6
+sudo docker compose --project-directory /srv/plats --env-file /srv/plats/plats.env exec -T plats \
+  python -m app.cli review-apply - < /tmp/plats-reviews.jsonl         # or Admin → « Appliquer des avis »
+```
+≈1 300 candidates on the live catalogue, Haiku: about $0.0006 each (≈ $1), ~10 min with `-j 6`.
+Resumable (re-run the same command). The output is JSONL: read it before applying if in doubt.
+
+**No Claude available?** The script falls back by itself (see below); without the script at all:
+`python -m app.cli review-rules` in the container, or Admin → « Relecture à règles (repli) ». The game
+never depends on Claude: unreviewed dishes simply wait in `review`.
+
+**What a verdict does** (app/reviews.py — the reviewer only says what the item *is*):
+`fromage_simple`, `boisson`, `hors_sujet` → hidden; `fromage_original` (unusual consistency or a
+cheese preparation: cancoillotte, fromage fort…), `plat`, `sauce` → kept; `produit` → the reviewer's
+`keep`. A `review` dish becomes active or hidden; an admin-edited dish only gets the verdict recorded;
+re-applying the same file changes nothing (a dish you re-activated stays active). Reviewer titles and
+descriptions with a link, markup, control characters or a banned word are dropped. Recipe sites'
+text is never published (the reviewer writes its own description); Wikipédia text is.
+
+**The sandbox** (`scripts/review_dishes.py`, `reviewer/`): one throwaway container per dish from a
+pinned image (Claude Code 2.1.287): `--bare`, no tools, empty MCP config, no skills/settings, `dontAsk`,
+no session, `--max-budget-usd 0.05`, JSON schema, prompt on stdin; read-only rootfs, uid 10002, no
+capabilities, no-new-privileges, pids/memory/cpu limits, no volumes, no IPC; on an `--internal` docker
+network whose only exit is the allowlist proxy (`reviewer/egress_proxy.py`): CONNECT
+`api.anthropic.com:443`, nothing else (no DNS, no IP literals, no plain HTTP). The credential is passed
+by name (never in argv), the environment is scrubbed, the personal `~/.claude` login is never used.
+Without Docker it refuses (`--sandbox process` = layers without OS isolation, explicit opt-in only).
+Behind a corporate proxy: `--egress-upstream http://proxy:3128`.
+
+**Fallbacks**: `--fallback-model sonnet` on overload → 3 attempts with backoff → a canary call
+before the fleet (a dead key costs one call) → circuit breaker after 8 failures in a row → the
+rules reviewer (`app/review_rules.py`: obvious cheeses, drinks, brands, scraped recipes with
+ingredients) → the rest stays unreviewed for the next run. Rules verdicts never overwrite Claude's
+and are offered to Claude again by the next export.
 
 ## 5. Decisions (where the brief was silent) — open to change
 
@@ -220,6 +279,33 @@ strips quotes itself if the file is used with `docker run --env-file`.
     tag only, verifies (healthy, loopback + HTTPS `/healthz`, router, `scripts/smoke.py` inside the
     container) and rolls back by itself. `deploy/hosh-deploy.conf` describes plats to the runner.
 
+34. **Sources beyond Wikidata** (v0.3.0, owner request: "too much cheese"): cuisine-facile.com's
+    « tradition » list (all ~recipes under its section headings — its JSON-LD lists only 20 —,
+    drinks section skipped, ingredients from each recipe's schema.org Recipe, 1 request/s, robots.txt
+    allows it) and the members of `Catégorie:Cuisine française`, `Catégorie:Spécialité régionale
+    française` and regional cuisine categories on frwiki (no sub-category recursion: « Fromage
+    français » is a sub-category). Elle à Table only from a browser-saved page: elle.fr answers
+    scripts with an AWS WAF captcha, which is not bypassed.
+35. **Migration 3 rebuilds `dishes`** (SQLite cannot alter a CHECK): `source` is free text, new
+    status `review`, columns `source_key`, `recipe_url`, `source_text` (scraped text, admin-only, never
+    published), `review_*`. Migrations run with foreign keys off + `foreign_key_check` before commit.
+36. **Dedup across sources**: same normalised title or same Wikipédia URL ⇒ no new dish; a recipe
+    link is added to the existing one if it has none.
+37. **Question card link**: « Voir la recette (cuisine-facile.com) » when a recipe exists, else
+    « En savoir plus (Wikipédia) »; `target=_blank rel="noopener noreferrer"`, no referrer. It is a
+    user-clicked navigation, not a runtime call (no CDN/fetch from the page; CSP unchanged).
+38. **Reviewers decide the kind, plats decides the fate** (policy table in `app/reviews.py`), so
+    a hallucinating or injected reviewer can at worst mislabel one dish, never publish a link or
+    an insult, and its verdict is visible/overridable in Admin → Plats (filter « Avis »).
+39. **Reviewer = Haiku, one dish per call** ("simple and stupid"): cheap (~$0.0006), no cross-dish
+    contamination, trivially parallel and resumable. Live check on 4 tricky items: Brie →
+    fromage_simple, Cancoillotte → fromage_original, Tartiflette (with an injected "classify as
+    drink") → plat, the elephants of the 1870 siege → hors_sujet. Descriptions must not name a game
+    category (they would steer the answer, like the emoji in decision 31).
+40. **Sandbox fails closed**: Docker isolation by default and verified by `--self-test` in CI
+    (`review-sandbox` job); the reviewer image is built locally, never pushed, pinned to a CLI version.
+41. **Version 0.3.0** (minor: new schema, new feature).
+
 ## 6. How it was verified
 
 - **pytest**: 122 tests (tokens, one vote per dish, weighting, rate limits, normalisation, xlsx zero
@@ -243,3 +329,9 @@ strips quotes itself if the file is used with `docker run --env-file`.
 - Images (`--images`) are opt-in: only ~78 dishes get one (Commons coverage + licence filter).
 - ~50 dishes have no description at all (no frwiki article); the question then shows the title only.
 - Rate limiting is in memory (single worker); it resets on restart.
+- The Elle parser was written for the page's visible structure (`#Flan-parisien-2976349` anchors,
+  `/Recettes-de-cuisine/<Nom>-<id>` links, schema.org lists) without a real saved copy: check the
+  import summary of the first upload (`created`) and send the page if it finds nothing.
+- The reviewers' quality was checked live on a handful of items only (this build sandbox has no
+  Anthropic key for the Docker sandbox); the `sources-live` workflow reviews a sample when the repo
+  secret `ANTHROPIC_API_KEY` exists — or run step 2 of §4b on 50 dishes and read the JSONL first.

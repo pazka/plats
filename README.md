@@ -6,7 +6,9 @@ thanks for every answer, public statistics per dish.
 
 - Product spec: [`BRIEF.md`](BRIEF.md)
 - Builder/agent instructions: [`CLAUDE.md`](CLAUDE.md)
-- Dish seed data: [Wikidata](https://www.wikidata.org) (CC0).
+- Dish data: [Wikidata](https://www.wikidata.org) (CC0), Wikipédia categories, recipe sites
+  (cuisine-facile.com, Elle à Table from a saved page) — each question links to its recipe.
+- Catalogue review: one sandboxed `claude -p` per dish (`scripts/review_dishes.py`, DEPLOY.md §4b).
 
 ## Stack
 
@@ -20,6 +22,9 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest                       # test suite (no network needed)
 PLATS_DATA_DIR=./data PLATS_COOKIE_SECURE=0 .venv/bin/uvicorn --factory app.main:run --reload
 .venv/bin/python scripts/import_wikidata.py      # optional: load the Wikidata catalogue
+.venv/bin/python -m app.cli import-sources       # optional: recipe sites + Wikipédia (status 'review')
+.venv/bin/python -m app.cli review-rules         # review without Claude (obvious cases only)
+python3 scripts/review_dishes.py --self-test     # prove the reviewers' Docker sandbox
 ```
 
 Admin credentials for local use: `PLATS_LOCAL=1 scripts/set-admin.sh ./.env` then export the

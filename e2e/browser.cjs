@@ -259,6 +259,12 @@ const flash = (page) => page.textContent(".flash, .alert").catch(() => "");
   await step("dish page, stats, about, 404", async () => {
     await visitor.goto("/plat/cassoulet");
     check((await visitor.locator(".dist li").count()) >= 9, "distribution rows on /plat/cassoulet");
+    const recipe = visitor.locator(".dish-link a");
+    check((await recipe.getAttribute("href")) === "https://cuisine-facile.com/viandes/recette-cassoulet.php"
+      && (await recipe.getAttribute("target")) === "_blank"
+      && (await recipe.getAttribute("rel")) === "noopener noreferrer"
+      && (await recipe.getAttribute("referrerpolicy")) === "no-referrer"
+      && (await recipe.textContent()).includes("Voir la recette"), "recipe link opens in a new tab, no opener, no referrer");
     await visitor.goto("/stats");
     const tiles = await visitor.textContent(".tiles");
     check(/\d/.test(tiles) && tiles.includes("réponses"), "stats tiles");
