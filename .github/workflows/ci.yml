@@ -3,7 +3,7 @@ name: ci
 # push to main → tests → build → Trivy CRITICAL gate → push ghcr.io/pazka/plats:ci and :<sha>
 on:
   push:
-    branches: [main, "claude/cool-mccarthy-2kgxvm"]  # TEMPORARY: full pipeline on the feature branch
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
