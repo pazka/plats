@@ -114,6 +114,10 @@ strips quotes itself if the file is used with `docker run --env-file`.
 Why: the Wikidata catalogue was too cheesy (each cheese its own "dish", trivially « Ingrédient »).
 v0.3.0 adds recipe sources and a review pass; the question card links to the recipe (new tab).
 
+**0. Upgrading to v0.3.0**: migration 3 rebuilds the `dishes` table at start (votes, merges, search
+index kept — tested on a database with votes). Take the backup of §4 first. A rollback to v0.2.4
+works on the migrated database (it ignores the new columns; `review` dishes stay invisible).
+
 **1. Import the sources** (in the container; new dishes enter as status `review`, not played yet;
 a title already in the catalogue only gets the recipe link; idempotent):
 ```sh
