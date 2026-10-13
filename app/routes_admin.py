@@ -11,14 +11,16 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import auth, db, export, importer, services
+from . import auth, db, export, importer, reviews, services
 from .ratelimit import parse_rules, validate_rules
 from .text import moderation_norm, slugify, title_norm
 from .web import get_conn, security_event
 
 router = APIRouter(prefix="/admin")
 PER_PAGE = 50
-STATUSES = ("active", "hidden", "pending", "flagged", "rejected", "merged")
+STATUSES = ("active", "hidden", "review", "pending", "flagged", "rejected", "merged")
+SOURCES = ("wikidata", "wikipedia", "cuisine-facile", "elle", "user", "manual")
+MAX_UPLOAD = 8 * 1024 * 1024
 
 
 # ------------------------------------------------------------------ plumbing
@@ -155,6 +157,7 @@ def dashboard(request: Request, conn=Depends(require_admin)):
         "active": one("SELECT COUNT(*) FROM dishes WHERE status='active'"),
         "hidden": one("SELECT COUNT(*) FROM dishes WHERE status='hidden'"),
         "pending": one("SELECT COUNT(*) FROM dishes WHERE status='pending'"),
+        "review": one("SELECT COUNT(*) FROM dishes WHERE status='review'"),
         "flagged": one("SELECT COUNT(*) FROM dishes WHERE status='flagged'"),
         "answers_24h": one("SELECT COUNT(*) FROM votes WHERE category_id IS NOT NULL AND created_at >= ?", since),
         "participants_24h": one("SELECT COUNT(DISTINCT visitor_id) FROM votes WHERE created_at >= ?", since),
@@ -168,14 +171,19 @@ def dashboard(request: Request, conn=Depends(require_admin)):
 
 @router.get("/plats")
 def dishes(request: Request, q: str = "", source: str = "", status: str = "", votes: str = "",
-           page_no: int = 1, conn=Depends(require_admin)):
+           avis: str = "", page_no: int = 1, conn=Depends(require_admin)):
     where, params = [], []
     if q:
         where.append("(d.title_norm LIKE ? OR d.slug LIKE ? OR d.qid = ?)")
         params += [f"%{title_norm(q)}%", f"%{slugify(q)}%", q.strip()]
-    if source in ("wikidata", "user", "manual"):
+    if source in SOURCES:
         where.append("d.source = ?")
         params.append(source)
+    if avis in reviews.KINDS:
+        where.append("d.review_kind = ?")
+        params.append(avis)
+    elif avis == "aucun":
+        where.append("d.review_kind = ''")
     if status in STATUSES:
         where.append("d.status = ?")
         params.append(status)
@@ -191,8 +199,11 @@ def dishes(request: Request, q: str = "", source: str = "", status: str = "", vo
                         params + [PER_PAGE, (page_no - 1) * PER_PAGE]).fetchall()
     return page(request, "dishes.html", {
         "rows": rows, "total": total, "pages": pages, "page_no": page_no, "statuses": STATUSES,
-        "f": {"q": q, "source": source, "status": status, "votes": votes},
+        "f": {"q": q, "source": source, "status": status, "votes": votes, "avis": avis},
+        "sources": SOURCES, "kinds": reviews.KINDS,
         "import_status": importer.import_status(conn),
+        "to_review": conn.execute("SELECT COUNT(*) FROM dishes WHERE status = 'review'").fetchone()[0],
+        "candidates": sum(1 for _ in reviews.export_candidates(conn)),
     })
 
 
@@ -255,6 +266,69 @@ async def run_import(request: Request, deps=Depends(admin_form)):
     if not started:
         return back("/admin/plats", err="Un import est déjà en cours.")
     return back("/admin/plats", ok="Import Wikidata lancé en arrière-plan (rafraîchissez pour suivre).")
+
+
+async def _upload(form, field: str) -> str | None:
+    """Text of an uploaded file (None when absent); bounded, decoded leniently."""
+    upload = form.get(field)
+    if upload is None or isinstance(upload, str) or not getattr(upload, "filename", ""):
+        return None
+    data = await upload.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise ValueError("Fichier trop gros (8 Mo au plus).")
+    return data.decode("utf-8", errors="replace")
+
+
+@router.post("/import-sources")
+async def run_import_sources(request: Request, deps=Depends(admin_form)):
+    conn, form = deps
+    try:
+        elle_html = await _upload(form, "elle_file")
+    except ValueError as exc:
+        return back("/admin/plats", err=str(exc))
+    sources = [s for s in ("cuisine-facile", "wikipedia") if form.get(s) == "1"] + (["elle"] if elle_html else [])
+    if not sources:
+        return back("/admin/plats", err="Choisissez au moins une source (ou joignez la page Elle).")
+    started = importer.start_sources_background(request.app.state.settings.db_path, sources=sources,
+                                                elle_html=elle_html)
+    audit(request, conn, "import_sources_started" if started else "import_sources_busy", {"sources": sources})
+    if not started:
+        return back("/admin/plats", err="Un import est déjà en cours.")
+    return back("/admin/plats", ok="Import lancé (" + ", ".join(sources) + ") : les nouveaux plats attendent "
+                                   "la relecture (statut « review »).")
+
+
+@router.get("/relecture/candidats.jsonl")
+def review_candidates(request: Request, tous: int = 0, conn=Depends(require_admin)):
+    lines = [json.dumps(c, ensure_ascii=False) for c in reviews.export_candidates(conn, include_reviewed=bool(tous))]
+    audit(request, conn, "review_export", {"candidates": len(lines)})
+    name = f"plats-candidats-{datetime.now(timezone.utc):%Y%m%d-%H%M}.jsonl"
+    return Response("\n".join(lines) + ("\n" if lines else ""), media_type="application/x-ndjson",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+@router.post("/relecture")
+async def review_apply(request: Request, deps=Depends(admin_form)):
+    conn, form = deps
+    try:
+        text = await _upload(form, "reviews")
+    except ValueError as exc:
+        return back("/admin/plats", err=str(exc))
+    if not text:
+        return back("/admin/plats", err="Joignez le fichier d'avis (.jsonl) produit par scripts/review_dishes.py.")
+    summary = reviews.apply_reviews(conn, reviews.parse_jsonl(text), actor="admin")
+    kinds = ", ".join(f"{k} {v}" for k, v in sorted(summary["by_kind"].items()))
+    return back("/admin/plats", ok=(f"{summary['applied']} avis appliqué(s) : {summary['activated']} activé(s), "
+                                    f"{summary['hidden']} masqué(s), {summary['unchanged']} inchangé(s), "
+                                    f"{summary['invalid'] + summary['unknown']} ignoré(s). {kinds}"))
+
+
+@router.post("/relecture/regles")
+async def review_rules(request: Request, deps=Depends(admin_form)):
+    conn, _form = deps
+    summary = reviews.apply_reviews(conn, reviews.rules_candidates(conn), actor="admin-rules")
+    return back("/admin/plats", ok=(f"Relecture à règles : {summary['applied']} avis ({summary['hidden']} masqué(s), "
+                                    f"{summary['activated']} activé(s)) ; le reste attend une relecture Claude."))
 
 
 @router.get("/plats/{dish_id}")

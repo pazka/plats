@@ -207,6 +207,15 @@
       var region = $("dish-region");
       region.textContent = d.region || "";
       region.hidden = !d.region;
+      var link = $("dish-link");
+      if (d.link_url) {
+        link.href = d.link_url;
+        $("dish-link-label").textContent = d.link_label;
+        $("dish-link-wrap").hidden = false;
+      } else {
+        link.href = "#";
+        $("dish-link-wrap").hidden = true;
+      }
       var fig = $("dish-figure");
       if (d.image) {
         $("dish-image").src = d.image;

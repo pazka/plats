@@ -7,6 +7,7 @@
   <div class="tile"><span class="tile-num">{{ t.participants | num }}</span><span>participant·es</span></div>
   <div class="tile"><span class="tile-num">{{ t.active | num }}</span><span>plats actifs ({{ t.hidden }} masqués)</span></div>
   <a class="tile" href="/admin/propositions"><span class="tile-num">{{ t.pending + t.flagged }}</span><span>à modérer ({{ t.pending }} en attente, {{ t.flagged }} signalés)</span></a>
+  <a class="tile" href="/admin/plats?status=review"><span class="tile-num">{{ t.review }}</span><span>plats importés à relire</span></a>
 </div>
 <h2>Dernières 24 h</h2>
 <ul>

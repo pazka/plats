@@ -7,11 +7,16 @@
   <input type="search" name="q" value="{{ f.q }}" placeholder="Titre, slug ou QID" aria-label="Recherche">
   <select name="source" aria-label="Source">
     <option value="">Toutes sources</option>
-    {% for s in ('wikidata', 'user', 'manual') %}<option value="{{ s }}"{% if f.source == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    {% for s in sources %}<option value="{{ s }}"{% if f.source == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
   </select>
   <select name="status" aria-label="Statut">
     <option value="">Tous statuts</option>
     {% for s in statuses %}<option value="{{ s }}"{% if f.status == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="avis" aria-label="Avis des relecteurs">
+    <option value="">Tous avis</option>
+    <option value="aucun"{% if f.avis == 'aucun' %} selected{% endif %}>pas encore relu</option>
+    {% for k in kinds %}<option value="{{ k }}"{% if f.avis == k %} selected{% endif %}>{{ k }}</option>{% endfor %}
   </select>
   <select name="votes" aria-label="Réponses">
     <option value="">Toutes</option>
@@ -34,7 +39,7 @@
 
 <table class="table">
   <thead><tr><th><input type="checkbox" data-check-all="ids" aria-label="Tout sélectionner"></th>
-    <th>#</th><th>Titre</th><th>Source</th><th>Statut</th><th>Réponses</th></tr></thead>
+    <th>#</th><th>Titre</th><th>Source</th><th>Statut</th><th>Avis</th><th>Réponses</th></tr></thead>
   <tbody>
   {% for d in rows %}
   <tr>
@@ -43,16 +48,17 @@
     <td><a href="/admin/plats/{{ d.id }}">{{ d.title }}</a>{% if d.flag_reason %} <span class="tag tag-warn">{{ d.flag_reason }}</span>{% endif %}</td>
     <td>{{ d.source }}{% if d.qid %} <span class="muted">{{ d.qid }}</span>{% endif %}</td>
     <td><span class="tag tag-{{ d.status }}">{{ d.status }}</span></td>
+    <td>{% if d.review_kind %}<span title="{{ d.review_reason }}">{{ d.review_kind }}{% if d.review_verdict == 'hide' %} ✗{% endif %}</span>{% endif %}</td>
     <td>{{ d.n }}</td>
   </tr>
-  {% else %}<tr><td colspan="6" class="muted">Aucun plat.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="7" class="muted">Aucun plat.</td></tr>{% endfor %}
   </tbody>
 </table>
 {% if pages > 1 %}
 <nav class="pager">
-  {% if page_no > 1 %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;page_no={{ page_no - 1 }}">← Précédent</a>{% endif %}
+  {% if page_no > 1 %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;avis={{ f.avis }}&amp;page_no={{ page_no - 1 }}">← Précédent</a>{% endif %}
   <span>Page {{ page_no }} / {{ pages }}</span>
-  {% if page_no < pages %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;page_no={{ page_no + 1 }}">Suivant →</a>{% endif %}
+  {% if page_no < pages %}<a href="?q={{ f.q | urlencode }}&amp;source={{ f.source }}&amp;status={{ f.status }}&amp;votes={{ f.votes }}&amp;avis={{ f.avis }}&amp;page_no={{ page_no + 1 }}">Suivant →</a>{% endif %}
 </nav>
 {% endif %}
 
@@ -75,6 +81,41 @@
       <label><input type="checkbox" name="enrich" value="1" checked> Compléter les descriptions courtes avec Wikipédia</label>
       <label><input type="checkbox" name="images" value="1"> Télécharger les images (Commons, avec licence)</label>
       <button type="submit" class="btn">Lancer l'import</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Recettes et Wikipédia</h2>
+    <p class="muted">Ajoute les recettes de cuisine-facile.com (liste « tradition ») et les articles des catégories
+      « Cuisine française » / spécialités régionales de Wikipédia. Un plat déjà présent reçoit seulement le lien
+      vers la recette ; les nouveaux attendent la relecture (statut « review », {{ to_review }} en ce moment).</p>
+    <form method="post" action="/admin/import-sources" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label><input type="checkbox" name="cuisine-facile" value="1" checked> cuisine-facile.com</label>
+      <label><input type="checkbox" name="wikipedia" value="1" checked> Wikipédia (catégories)</label>
+      <label>Elle à Table : la page « Gastronomie française » enregistrée depuis votre navigateur (.html) —
+        le site bloque les scripts <input type="file" name="elle_file" accept=".html,.htm,text/html"></label>
+      <button type="submit" class="btn">Lancer l'import</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Relecture par Claude</h2>
+    <p class="muted">{{ candidates }} plat(s) à relire. Téléchargez les candidats, lancez
+      <code>python3 scripts/review_dishes.py candidats.jsonl -o avis.jsonl</code> sur une machine où
+      <code>claude</code> est installé (un relecteur par plat), puis renvoyez le fichier d'avis.
+      Les fromages « simples », boissons et hors-sujet sont masqués ; les fromages à la consistance
+      originale et les plats au fromage restent.</p>
+    <p><a class="btn btn-secondary" href="/admin/relecture/candidats.jsonl">Candidats à relire (.jsonl)</a>
+      <a href="/admin/relecture/candidats.jsonl?tous=1">tous, même déjà relus</a></p>
+    <form method="post" action="/admin/relecture" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Fichier d'avis <input type="file" name="reviews" accept=".jsonl,.json,application/x-ndjson" required></label>
+      <button type="submit" class="btn">Appliquer des avis</button>
+    </form>
+    <form method="post" action="/admin/relecture/regles">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <p class="muted">Sans Claude : le relecteur à règles ne tranche que les cas évidents (fromage décrit comme
+        tel, boisson, marque, recette avec ingrédients) ; Claude pourra revoir ses avis plus tard.</p>
+      <button type="submit" class="btn btn-secondary">Relecture à règles (repli)</button>
     </form>
   </section>
   <section class="card">

@@ -36,6 +36,10 @@
     <h1 id="dish-title">{{ question.dish.title if question else '' }}</h1>
     <p id="dish-desc" class="dish-desc">{{ question.dish.description if question else '' }}</p>
     <p id="dish-region" class="dish-region"{% if not (question and question.dish.region) %} hidden{% endif %}>{{ question.dish.region if question else '' }}</p>
+    <p class="dish-link" id="dish-link-wrap"{% if not (question and question.dish.link_url) %} hidden{% endif %}>
+      <a id="dish-link" href="{{ question.dish.link_url if question and question.dish.link_url else '#' }}"
+         target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><span id="dish-link-label">{{ question.dish.link_label if question else '' }}</span><span aria-hidden="true"> ↗</span><span class="sr-only"> (nouvel onglet)</span></a>
+    </p>
 
     <form method="post" action="/voter" id="answer-form">
       <input type="hidden" name="token" id="token" value="{{ question.token if question else '' }}">

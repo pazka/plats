@@ -11,6 +11,7 @@
   <h1>{{ dish.title }}</h1>
   {% if dish.description %}<p class="dish-desc">{{ dish.description }}</p>{% endif %}
   {% if dish.region %}<p class="dish-region">{{ dish.region }}</p>{% endif %}
+  {% if dish.link_url %}<p class="dish-link"><a href="{{ dish.link_url }}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">{{ dish.link_label }}<span aria-hidden="true"> ↗</span><span class="sr-only"> (nouvel onglet)</span></a></p>{% endif %}
 
   <h2>Ce que les gens en pensent</h2>
   <p><strong>{{ dist.total }}</strong> réponse{{ 's' if dist.total != 1 }}{% if dist.skips %} · {{ dist.skips }} personne{{ 's' if dist.skips != 1 }} ne le connai{{ 'ssent' if dist.skips != 1 else 't' }} pas{% endif %}
@@ -27,7 +28,7 @@
   </ul>
 
   <p class="source muted">Source :
-    {% if dish.source == 'wikidata' %}Wikidata (CC0){% elif dish.source == 'user' %}proposé par un·e participant·e{% else %}ajouté par l'équipe{% endif %}
+    {% if dish.source == 'wikidata' %}Wikidata (CC0){% elif dish.source == 'wikipedia' %}Wikipédia{% elif dish.source == 'cuisine-facile' %}recette de cuisine-facile.com{% elif dish.source == 'elle' %}Elle à Table{% elif dish.source == 'user' %}proposé par un·e participant·e{% else %}ajouté par l'équipe{% endif %}
     {% if dish.wiki_url %} · <a href="{{ dish.wiki_url }}" rel="noopener">article Wikipédia</a>{% endif %}
   </p>
   <p><a class="btn" href="/">Jouer</a> <a class="btn btn-secondary" href="/plats">Tous les plats</a></p>
