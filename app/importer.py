@@ -15,7 +15,7 @@ from urllib.parse import quote, unquote
 
 import httpx
 
-from . import __version__, db, services
+from . import __version__, db, review_rules, services
 from .text import basic_norm, title_norm
 
 log = logging.getLogger("plats.importer")
@@ -45,14 +45,9 @@ SELECT DISTINCT ?item WHERE {
 }
 """
 
-# Fallback when the class hierarchy is incomplete: the description's head noun is a drink.
-DRINK_WORDS = {
-    "vin", "vins", "boisson", "boissons", "biere", "bieres", "liqueur", "liqueurs", "spiritueux",
-    "eau", "cidre", "aperitif", "cocktail", "champagne", "whisky", "cognac", "armagnac",
-    "calvados", "pastis", "cepage", "appellation", "vignoble", "domaine", "cuvee", "marc", "rhum",
-    "brandy", "digestif", "sirop", "soda", "limonade", "the", "tisane", "infusion", "cafe",
-}
-# Obvious non-dishes found in the live data: brands, companies, plant cultivars, animal breeds.
+# Fallback when the class hierarchy is incomplete: the description's head noun is a drink, or an
+# obvious non-dish (brands, companies, plant cultivars, animal breeds found in the live data).
+DRINK_WORDS = review_rules.DRINK_WORDS
 NON_DISH_WORDS = {
     "marque", "marques", "entreprise", "societe", "restaurant", "enseigne", "chaine", "fabricant",
     "cultivar", "race", "ustensile", "appareil", "cooperative", "label",
@@ -285,31 +280,46 @@ def import_status(conn) -> dict:
 
 def run_logged(db_path: Path, images_dir: Path, *, enrich: bool, images: bool,
                client: httpx.Client | None = None, actor: str = "cli") -> dict:
-    """Run an import with a lock, recording progress in settings + the audit log."""
+    """Run a Wikidata import with a lock, recording progress in settings + the audit log."""
+    return run_job(db_path, kind="wikidata", actor=actor, client=client,
+                   job=lambda conn, http, progress: run_import(conn, client=http, images_dir=images_dir,
+                                                               enrich=enrich, images=images, progress=progress))
+
+
+def run_sources_logged(db_path: Path, *, sources, elle_html: str | None = None,
+                       client: httpx.Client | None = None, actor: str = "cli") -> dict:
+    """Same, for the recipe sites / Wikipédia categories (sources.py)."""
+    from . import sources as src
+
+    return run_job(db_path, kind="sources", actor=actor, client=client,
+                   job=lambda conn, http, progress: src.run_sources(conn, client=http, sources=sources,
+                                                                    elle_html=elle_html, progress=progress))
+
+
+def run_job(db_path: Path, *, kind: str, job, actor: str, client: httpx.Client | None = None) -> dict:
     if not _lock.acquire(blocking=False):
         raise RuntimeError("Un import est déjà en cours.")
     conn = db.connect(db_path)
+    action = "import_wikidata" if kind == "wikidata" else f"import_{kind}"
     try:
         def status(**kw):
-            db.set_setting(conn, "import_status", json.dumps(kw, ensure_ascii=False))
+            db.set_setting(conn, "import_status", json.dumps({"kind": kind, **kw}, ensure_ascii=False))
 
         started = int(time.time())
         status(state="running", started=started, actor=actor)
         try:
             with (client or make_client()) as http:
-                summary = run_import(
-                    conn, client=http, images_dir=images_dir, enrich=enrich, images=images,
-                    progress=lambda n, total: status(state="running", started=started, actor=actor,
-                                                     progress=f"{n}/{total}"))
+                summary = job(conn, http, lambda n, total: status(state="running", started=started, actor=actor,
+                                                                  progress=f"{n}/{total}"))
         except Exception as exc:  # noqa: BLE001 - reported to the admin
-            log.error(json.dumps({"event": "import_failed", "message": "wikidata import failed",
+            log.error(json.dumps({"event": "import_failed", "kind": kind, "message": f"{kind} import failed",
                                   "error": f"{type(exc).__name__}: {exc}"[:500]}))
             status(state="error", started=started, finished=int(time.time()), error=str(exc)[:500])
-            db.audit(conn, "import_wikidata_failed", str(exc)[:500])
+            db.audit(conn, action + "_failed", str(exc)[:500])
             raise
         status(state="done", started=started, finished=int(time.time()), summary=summary, actor=actor)
-        db.audit(conn, "import_wikidata", json.dumps(summary))
-        log.info(json.dumps({"event": "import_done", **summary}))
+        db.audit(conn, action, json.dumps(summary, ensure_ascii=False))
+        log.info(json.dumps({"event": "import_done", "kind": kind, **summary}, ensure_ascii=False))
         return summary
     finally:
         conn.close()
@@ -317,14 +327,22 @@ def run_logged(db_path: Path, images_dir: Path, *, enrich: bool, images: bool,
 
 
 def start_background(db_path: Path, images_dir: Path, *, enrich: bool, images: bool) -> bool:
+    return _background(lambda: run_logged(db_path, images_dir, enrich=enrich, images=images, actor="admin"))
+
+
+def start_sources_background(db_path: Path, *, sources, elle_html: str | None = None) -> bool:
+    return _background(lambda: run_sources_logged(db_path, sources=sources, elle_html=elle_html, actor="admin"))
+
+
+def _background(fn) -> bool:
     if _lock.locked():
         return False
 
     def target():
         try:
-            run_logged(db_path, images_dir, enrich=enrich, images=images, actor="admin")
+            fn()
         except Exception:  # noqa: BLE001 - already logged and recorded
             pass
 
-    threading.Thread(target=target, name="wikidata-import", daemon=True).start()
+    threading.Thread(target=target, name="catalogue-import", daemon=True).start()
     return True
