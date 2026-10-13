@@ -34,6 +34,20 @@ jobs:
       - name: JS syntax check
         run: node --check app/static/app.js && node --check app/static/admin.js
 
+  # The claude -p reviewers' sandbox (reviewer/, scripts/review_dishes.py): build it and prove from
+  # inside a jailed container that DNS, direct routes and every other host/port are closed and only
+  # CONNECT api.anthropic.com:443 through the allowlist proxy works. No secret involved.
+  review-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Sandbox self-test
+        run: >-
+          python3 scripts/review_dishes.py --self-test --rebuild
+          --build-arg NODE_IMAGE=mirror.gcr.io/library/node:22-slim
+          --build-arg PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-trixie
+
   image:
     needs: test
     runs-on: ubuntu-latest

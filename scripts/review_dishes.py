@@ -284,19 +284,53 @@ class DockerSandbox:
     def egress_log(self) -> str:
         return self._docker("logs", EGRESS_NAME, check=False).stderr
 
+    def docker_run_cmd(self, name: str, entrypoint: str = "") -> list[str]:
+        tmpfs = "rw,nosuid,nodev,noexec,size=64m,uid=10002,gid=10002,mode=700"
+        return ["docker", "run", "--rm", "-i", "--name", name, "--network", NETWORK,
+                "--read-only", "--tmpfs", f"/home/reviewer:{tmpfs}", "--tmpfs", f"/tmp:{tmpfs}",
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "10002:10002",
+                "--pids-limit", "256", "--memory", "1g", "--memory-swap", "1g", "--cpus", "1",
+                "--ulimit", "core=0", "--ulimit", "nofile=1024:1024", "--ipc", "none", "--log-driver", "none",
+                "-e", f"HTTPS_PROXY=http://{EGRESS_NAME}:3128", "-e", "NO_PROXY=",
+                *[a for k in self.creds for a in ("-e", k)],  # by name: the value never appears in argv
+                *(["--entrypoint", entrypoint] if entrypoint else []), IMAGE_REVIEWER]
+
     def run(self, args: list[str], prompt: str, timeout: int) -> tuple[int, str, str]:
         name = f"plats-review-{uuid.uuid4().hex[:12]}"
-        tmpfs = "rw,nosuid,nodev,noexec,size=64m,uid=10002,gid=10002,mode=700"
-        cmd = ["docker", "run", "--rm", "-i", "--name", name, "--network", NETWORK,
-               "--read-only", "--tmpfs", f"/home/reviewer:{tmpfs}", "--tmpfs", f"/tmp:{tmpfs}",
-               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "10002:10002",
-               "--pids-limit", "256", "--memory", "1g", "--memory-swap", "1g", "--cpus", "1",
-               "--ulimit", "core=0", "--ulimit", "nofile=1024:1024", "--ipc", "none", "--log-driver", "none",
-               "-e", f"HTTPS_PROXY=http://{EGRESS_NAME}:3128", "-e", "NO_PROXY=",
-               *[a for k in self.creds for a in ("-e", k)],  # by name: the value never appears in argv
-               IMAGE_REVIEWER, *args]
+        cmd = self.docker_run_cmd(name) + args
         return _run(cmd, prompt=prompt, env={**self.docker_env, **self.creds}, cwd=str(ROOT), timeout=timeout,
                     on_timeout=lambda: self._docker("kill", name, check=False, timeout=30))
+
+
+JAIL_EXPECTED = {
+    "dns": "blocked", "direct_ip": "blocked", "direct_anthropic": "blocked",
+    "proxy_other_host": "403", "proxy_other_port": "403", "proxy_ip_literal": "403",
+    "proxy_plain_http": "403", "proxy_lookalike": "403", "proxy_anthropic": "200",
+    "rootfs": "read-only", "uid": 10002, "caps": "0000000000000000", "no_new_privs": "1",
+}
+
+
+def self_test(sandbox: "DockerSandbox") -> int:
+    """Prove the jail from the inside, with the exact flags of a reviewer call but `node` instead of
+    `claude`: no DNS, no direct route, only CONNECT api.anthropic.com:443 through the proxy."""
+    sandbox.setup()
+    try:
+        cmd = sandbox.docker_run_cmd("plats-review-selftest", entrypoint="node") + ["-"]
+        proc = subprocess.run(cmd, input=(REVIEWER_DIR / "jail_probe.js").read_text(), capture_output=True,
+                              text=True, timeout=180, env=sandbox.docker_env)
+        try:
+            got = json.loads(proc.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            log(f"sonde illisible : {proc.stdout[-500:]} {proc.stderr[-500:]}")
+            return 1
+        bad = {k: (got.get(k), v) for k, v in JAIL_EXPECTED.items() if got.get(k) != v}
+        for k, v in JAIL_EXPECTED.items():
+            log(f"  {'ok ' if k not in bad else 'KO '} {k:18} {got.get(k)!s:20} (attendu {v})")
+        log("--- proxy :\n" + sandbox.egress_log().strip())
+        log("bac à sable conforme" if not bad else f"bac à sable NON conforme : {bad}")
+        return 0 if not bad else 1
+    finally:
+        sandbox.teardown()
 
 
 # ------------------------------------------------------------------ one reviewer
@@ -365,8 +399,10 @@ def make_sandbox(opts):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("candidates", help="JSONL from `python -m app.cli review-export` ('-' = stdin)")
-    ap.add_argument("-o", "--output", required=True, help="JSONL verdicts (appended; resumable)")
+    ap.add_argument("candidates", nargs="?", help="JSONL from `python -m app.cli review-export` ('-' = stdin)")
+    ap.add_argument("-o", "--output", help="JSONL verdicts (appended; resumable)")
+    ap.add_argument("--self-test", action="store_true",
+                    help="build the Docker sandbox and prove from inside that only api.anthropic.com:443 is reachable")
     ap.add_argument("-j", "--jobs", type=int, default=6, help="parallel reviewers (default 6, max 16)")
     ap.add_argument("--engine", choices=["claude", "rules"], default="claude",
                     help="rules = deterministic reviewer only, no Claude at all")
@@ -389,6 +425,15 @@ def main(argv=None) -> int:
                     help="http://host:port proxy the egress proxy must go through, if any")
     opts = ap.parse_args(argv)
     opts.jobs = max(1, min(16, opts.jobs))
+    if opts.self_test:
+        try:
+            return self_test(DockerSandbox({}, rebuild=opts.rebuild, build_args=opts.build_arg,
+                                           build_network=opts.build_network, egress_upstream=opts.egress_upstream))
+        except Unavailable as exc:
+            log(f"bac à sable indisponible : {exc}")
+            return 2
+    if not opts.candidates or not opts.output:
+        ap.error("candidates and -o/--output are required (or --self-test)")
 
     items = read_jsonl(opts.candidates)
     done: set[tuple] = set()

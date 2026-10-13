@@ -1,0 +1,104 @@
+name: sources-live
+
+# Manual check of the new dish sources against the real sites (the tests only use fixtures):
+# Wikidata import, then cuisine-facile.com + Wikipédia categories in a hardened container, the
+# rules fallback, and — when the repo secret ANTHROPIC_API_KEY exists — a sample reviewed by the
+# sandboxed claude -p reviewers. Reports counts and samples. Nothing is pushed anywhere.
+on:
+  push:  # TEMPORARY: validation from the feature branch
+    branches: ["claude/**"]
+    paths: [".github/workflows/sources-live.yml"]
+  workflow_dispatch:
+    inputs:
+      review_limit:
+        description: "Dishes reviewed by Claude (needs the ANTHROPIC_API_KEY secret; 0 = none)"
+        type: number
+        default: 60
+
+permissions:
+  contents: read
+
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      REVIEW_LIMIT: ${{ inputs.review_limit || 60 }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: plats:live
+          cache-from: type=gha
+
+      - name: Start container
+        run: |
+          docker run -d --name live --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -e PLATS_COOKIE_SECURE=0 plats:live
+          for i in $(seq 1 30); do docker exec live python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')" 2>/dev/null && break; sleep 2; done
+
+      - name: Wikidata import (the existing catalogue)
+        run: docker exec live python scripts/import_wikidata.py --no-enrich | tail -n1
+
+      - name: Sources import (cuisine-facile + Wikipédia), timed
+        run: |
+          start=$(date +%s)
+          docker exec live python -m app.cli import-sources | tee sources.json
+          echo "duration: $(( $(date +%s) - start )) s"
+          { echo "### Sources import"; echo '```'; tail -n1 sources.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Re-run (idempotency on live data)
+        run: |
+          docker exec live python -m app.cli import-sources | tee rerun.json
+          python3 -c "import json; d=json.loads(open('rerun.json').read().splitlines()[-1]); assert all(v['created']==0 for v in d.values()), d; print('idempotent OK')"
+
+      - name: Claude review of a sample (sandboxed)
+        if: env.HAS_KEY == 'true' && env.REVIEW_LIMIT != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          docker exec live python -m app.cli review-export --limit "$REVIEW_LIMIT" > candidates.jsonl
+          python3 scripts/review_dishes.py candidates.jsonl -o reviews.jsonl -j 6 --fallback none \
+            --build-arg NODE_IMAGE=mirror.gcr.io/library/node:22-slim \
+            --build-arg PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-trixie
+          docker exec -i live python -m app.cli review-apply - < reviews.jsonl | tee applied.json
+          { echo "### Claude review ($REVIEW_LIMIT)"; echo '```'; tail -n1 applied.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rules fallback on the rest
+        run: docker exec live python -m app.cli review-rules | tee rules.json
+
+      - name: Report
+        run: |
+          docker exec -i live python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import sqlite3
+          c = sqlite3.connect("/data/plats.sqlite3")
+          q = lambda sql: c.execute(sql).fetchall()
+          print("\n### Catalogue by source × status\n\n| source | status | n |\n|---|---|---|")
+          for s, st, n in q("select source, status, count(*) from dishes group by 1, 2 order by 1, 2"):
+              print(f"| {s} | {st} | {n} |")
+          print("\n### Verdicts\n\n| model | kind | verdict | n |\n|---|---|---|---|")
+          for m, k, v, n in q("select review_model, review_kind, review_verdict, count(*) from dishes"
+                              " where review_kind != '' group by 1, 2, 3 order by 1, 2"):
+              print(f"| {m} | {k} | {v} | {n} |")
+          linked = q("select count(*) from dishes where recipe_url != ''")[0][0]
+          print(f"\n- dishes with a recipe link: {linked}")
+          print("\n### Sample of new dishes\n\n| source | status | title | kind | description / source text |\n|---|---|---|---|---|")
+          for row in q("select source, status, title, review_kind, coalesce(nullif(description, ''), source_text)"
+                       " from dishes where source in ('cuisine-facile', 'wikipedia') order by random() limit 50"):
+              print("| " + " | ".join(str(x or "")[:110].replace("|", "/").replace("\n", " ") for x in row) + " |")
+          print("\n### Linked to an existing dish\n")
+          for t, u in q("select title, recipe_url from dishes where recipe_url != '' and source not in"
+                        " ('cuisine-facile', 'elle') limit 20"):
+              print(f"- {t} → {u}")
+          PY
+
+      - name: Smoke checks
+        run: docker exec live python scripts/smoke.py http://127.0.0.1:8000 --min-dishes 500
+
+      - name: Logs
+        if: always()
+        run: docker logs live 2>&1 | python3 scripts/monitor_logs.py
