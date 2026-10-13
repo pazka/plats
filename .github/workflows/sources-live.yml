@@ -5,9 +5,6 @@ name: sources-live
 # rules fallback, and — when the repo secret ANTHROPIC_API_KEY exists — a sample reviewed by the
 # sandboxed claude -p reviewers. Reports counts and samples. Nothing is pushed anywhere.
 on:
-  push:  # TEMPORARY: validation from the feature branch
-    branches: ["claude/**"]
-    paths: [".github/workflows/sources-live.yml"]
   workflow_dispatch:
     inputs:
       review_limit:

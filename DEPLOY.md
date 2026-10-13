@@ -308,7 +308,7 @@ and are offered to Claude again by the next export.
 
 ## 6. How it was verified
 
-- **pytest**: 122 tests (tokens, one vote per dish, weighting, rate limits, normalisation, xlsx zero
+- **pytest**: 163 tests (tokens, one vote per dish, weighting, rate limits, normalisation, xlsx zero
   formula, admin auth/CSRF/lockout/TOTP replay, importer idempotency on fixtures…).
 - **CI on every push**: tests → image → Trivy CRITICAL gate → container smoke → **browser e2e
   (Chromium, 111 checks: play loop, milestones 5/25/30, reduced motion, no-JS, mobile, dark mode,
@@ -323,6 +323,19 @@ and are offered to Claude again by the next export.
   fetched → 178 drinks and 66 non-dishes skipped → **985 dishes** in ~3 min; 652 descriptions
   enriched from frwiki (all HTTP 200), 114 still under 40 characters (50 empty); with `--images`,
   78 thumbnails with licence. Re-run: 0 created, 0 changed. Smoke checks pass on that catalogue.
+- **Live sources** (v0.3.0, workflow `sources-live`, hardened container, real sites): cuisine-facile
+  « tradition » = 47 recipes → 23 linked to an existing dish (Bœuf bourguignon, Tarte Tatin, Coq au
+  vin…), 24 new; Wikipédia categories = 691 articles → 224 already known, 467 new (in `review`);
+  294 s (paced). Re-run: 0 created. **Rules fallback alone: 262 plain cheeses of the 985 Wikidata
+  dishes hidden (27 %)**, 5 « original » cheeses kept, 6 drinks + 2 off-topic hidden, the 24 recipes
+  activated → 748 active dishes; smoke checks and logs clean.
+- **Reviewer prompt on real items** (30 of those Wikipédia candidates, Haiku, $0.018): every
+  restaurant (L'Osier, Everest), person, market, contest and « Cuisines du palais de l'Élysée » →
+  hors_sujet; Raclette, Matouille, Cordon bleu, Fleischschnacka… → plat; charcuterie/olives/truffe
+  → produit (all kept: the `keep` of products is lenient). Run with this build session's own
+  credentials outside the sandbox (it has no API key); the sandboxed path was verified up to the
+  API (a real 401 through the egress proxy) and by `--self-test` (13/13).
+- **Browser e2e**: 113/113 (new: the recipe link opens in a new tab, noopener, noreferrer).
 
 ## 7. Known limits
 
