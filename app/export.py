@@ -45,15 +45,16 @@ def build_export(conn) -> bytes:
     wb = xlsxwriter.Workbook(buf, WORKBOOK_OPTIONS)
     cats = {c["id"]: c for c in services.categories(conn, active_only=False)}
 
-    dish_cols = ["id", "slug", "title", "description", "region", "source", "qid", "wiki_url", "status",
-                 "flag_reason", "merged_into", "image_path", "image_author", "image_license",
-                 "created_at", "updated_at"]
+    dish_cols = ["id", "slug", "title", "description", "region", "source", "qid", "source_key", "wiki_url",
+                 "recipe_url", "status", "flag_reason", "merged_into", "image_path", "image_author",
+                 "image_license", "review_kind", "review_verdict", "review_reason", "created_at", "updated_at"]
     dishes = conn.execute("SELECT * FROM dishes ORDER BY id").fetchall()
 
     def dish_row(d):
         return [d["id"], d["slug"], d["title"], d["description"], d["region"], d["source"], d["qid"],
-                d["wiki_url"], d["status"], d["flag_reason"], d["merged_into"], d["image_path"],
-                d["image_author"], d["image_license"], _iso(d["created_at"]), _iso(d["updated_at"])]
+                d["source_key"], d["wiki_url"], d["recipe_url"], d["status"], d["flag_reason"], d["merged_into"],
+                d["image_path"], d["image_author"], d["image_license"], d["review_kind"], d["review_verdict"],
+                d["review_reason"], _iso(d["created_at"]), _iso(d["updated_at"])]
 
     _write_sheet(wb, "dishes", dish_cols, (dish_row(d) for d in dishes))
 

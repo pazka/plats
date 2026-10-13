@@ -1,4 +1,4 @@
-"""Command line: `python -m app.cli {migrate,import-wikidata,set-admin}`."""
+"""Command line: `python -m app.cli {migrate,import-wikidata,import-sources,review-export,review-apply,set-admin}`."""
 from __future__ import annotations
 
 import argparse
@@ -36,6 +36,79 @@ def cmd_import(args) -> int:
     except Exception as exc:  # noqa: BLE001 - details are in the JSON log line above
         print(json.dumps({"event": "import_failed", "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
         return 1
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0
+
+
+def cmd_import_sources(args) -> int:
+    from . import db, importer
+    from .config import load_settings
+    from .web import setup_logging
+
+    setup_logging()
+    settings = load_settings()
+    db.migrate(settings.db_path)
+    elle_html = Path(args.elle_file).read_text(encoding="utf-8", errors="replace") if args.elle_file else None
+    sources = args.source or (["cuisine-facile", "wikipedia"] + (["elle"] if elle_html else []))
+    try:
+        summary = importer.run_sources_logged(settings.db_path, sources=sources, elle_html=elle_html, actor="cli")
+    except Exception as exc:  # noqa: BLE001 - details are in the JSON log line above
+        print(json.dumps({"event": "import_failed", "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
+        return 1
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0
+
+
+def cmd_review_export(args) -> int:
+    from . import db, reviews
+    from .config import load_settings
+
+    settings = load_settings()
+    db.migrate(settings.db_path)
+    conn = db.connect(settings.db_path)
+    try:
+        n = 0
+        for item in reviews.export_candidates(conn, include_reviewed=args.all, limit=args.limit):
+            sys.stdout.write(json.dumps(item, ensure_ascii=False) + "\n")
+            n += 1
+    finally:
+        conn.close()
+    print(json.dumps({"event": "review_export", "candidates": n}), file=sys.stderr)
+    return 0
+
+
+def cmd_review_apply(args) -> int:
+    from . import db, reviews
+    from .config import load_settings
+
+    settings = load_settings()
+    db.migrate(settings.db_path)
+    text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
+    conn = db.connect(settings.db_path)
+    try:
+        summary = reviews.apply_reviews(conn, reviews.parse_jsonl(text), actor="cli")
+    finally:
+        conn.close()
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0
+
+
+def cmd_review_rules(args) -> int:
+    from . import db, reviews
+    from .config import load_settings
+
+    settings = load_settings()
+    db.migrate(settings.db_path)
+    conn = db.connect(settings.db_path)
+    try:
+        records = reviews.rules_candidates(conn)
+        if args.dry_run:
+            for rec in records:
+                print(json.dumps(rec, ensure_ascii=False))
+            return 0
+        summary = reviews.apply_reviews(conn, records, actor="cli-rules")
+    finally:
+        conn.close()
     print(json.dumps(summary, ensure_ascii=False))
     return 0
 
@@ -127,6 +200,21 @@ def main(argv=None) -> int:
     p.add_argument("--no-enrich", action="store_true", help="don't fetch frwiki summaries for short descriptions")
     p.add_argument("--images", action="store_true", help="download Commons thumbnails (with licence) locally")
     p.set_defaults(func=cmd_import)
+    p = sub.add_parser("import-sources", help="add dishes from recipe sites / Wikipédia (status 'review')")
+    p.add_argument("--source", action="append", choices=["cuisine-facile", "wikipedia", "elle"],
+                   help="repeatable; default: cuisine-facile + wikipedia (+ elle with --elle-file)")
+    p.add_argument("--elle-file", help="the Elle gallery page saved from a browser (elle.fr blocks scripts)")
+    p.set_defaults(func=cmd_import_sources)
+    p = sub.add_parser("review-export", help="JSONL of dishes for scripts/review_dishes.py, on stdout")
+    p.add_argument("--all", action="store_true", help="include dishes already reviewed")
+    p.add_argument("--limit", type=int, default=0)
+    p.set_defaults(func=cmd_review_export)
+    p = sub.add_parser("review-apply", help="apply reviewer verdicts (JSONL file, '-' = stdin)")
+    p.add_argument("file")
+    p.set_defaults(func=cmd_review_apply)
+    p = sub.add_parser("review-rules", help="fallback without Claude: deterministic verdicts, obvious cases only")
+    p.add_argument("--dry-run", action="store_true", help="print the verdicts (JSONL) instead of applying them")
+    p.set_defaults(func=cmd_review_rules)
     p = sub.add_parser("set-admin", help="interactive: admin password + TOTP into an env file")
     p.add_argument("--env-file", required=True)
     p.set_defaults(func=cmd_set_admin)
