@@ -39,3 +39,13 @@ resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, releases deploy thr
   wrong, tell the owner which one (the script's error says it) and stop.
 - Never run `scripts/set-admin.sh` yourself (interactive, owner-only), never change code on the
   box, never delete the `plats-data` volume.
+
+## Maintenance (autonomous agent)
+Keep Python, pip packages, the base image and Actions current **without changing behaviour**. Read `TESTING.md`.
+- Gate = `ci` green: `test (python 3.12|3.13|3.14)` + `image`. Work on `agent/<topic>` branches (CI runs,
+  nothing is pushed to ghcr). Don't push to `main`, tag or release unless the owner asks: a release deploys.
+- Dependabot PRs (weekly, 7-day cooldown): green → summarise risk in a PR comment; red → reproduce per
+  TESTING.md and fix with the smallest change. When the Dockerfile moves to a new Python, move the test
+  matrix to `[new, next…]`.
+- Never weaken or delete a test to get green; `tests/fixtures/schema.json` changes only with a migration.
+  If behaviour must change, ask the owner.
