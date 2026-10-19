@@ -1,0 +1,127 @@
+{
+  "objects": [
+    "index dishes_source on dishes",
+    "index dishes_status on dishes",
+    "index login_attempts_ts on login_attempts",
+    "index votes_created on votes",
+    "index votes_dish on votes",
+    "index votes_ip on votes",
+    "table admin_sessions on admin_sessions",
+    "table audit_log on audit_log",
+    "table banned_words on banned_words",
+    "table categories on categories",
+    "table dishes on dishes",
+    "table dishes_fts on dishes_fts",
+    "table dishes_fts_config on dishes_fts_config",
+    "table dishes_fts_data on dishes_fts_data",
+    "table dishes_fts_docsize on dishes_fts_docsize",
+    "table dishes_fts_idx on dishes_fts_idx",
+    "table login_attempts on login_attempts",
+    "table settings on settings",
+    "table used_tokens on used_tokens",
+    "table votes on votes",
+    "trigger dishes_ad on dishes",
+    "trigger dishes_ai on dishes",
+    "trigger dishes_au on dishes"
+  ],
+  "columns": {
+    "admin_sessions": [
+      "id_hash TEXT PK",
+      "csrf TEXT NOT NULL",
+      "created_at INTEGER NOT NULL",
+      "expires_at INTEGER NOT NULL"
+    ],
+    "audit_log": [
+      "id INTEGER PK",
+      "ts INTEGER NOT NULL",
+      "action TEXT NOT NULL",
+      "detail TEXT NOT NULL",
+      "ip_hash TEXT NOT NULL"
+    ],
+    "banned_words": [
+      "id INTEGER PK",
+      "word TEXT NOT NULL",
+      "word_norm TEXT NOT NULL",
+      "mode TEXT NOT NULL",
+      "created_at INTEGER NOT NULL"
+    ],
+    "categories": [
+      "id INTEGER PK",
+      "slug TEXT NOT NULL",
+      "name TEXT NOT NULL",
+      "color TEXT NOT NULL",
+      "emoji TEXT NOT NULL",
+      "position INTEGER NOT NULL",
+      "active INTEGER NOT NULL",
+      "created_at INTEGER NOT NULL"
+    ],
+    "dishes": [
+      "id INTEGER PK",
+      "slug TEXT NOT NULL",
+      "title TEXT NOT NULL",
+      "title_norm TEXT NOT NULL",
+      "description TEXT NOT NULL",
+      "region TEXT NOT NULL",
+      "source TEXT NOT NULL",
+      "qid TEXT",
+      "wiki_url TEXT NOT NULL",
+      "image_path TEXT NOT NULL",
+      "image_author TEXT NOT NULL",
+      "image_license TEXT NOT NULL",
+      "image_license_url TEXT NOT NULL",
+      "image_source_url TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "flag_reason TEXT NOT NULL",
+      "merged_into INTEGER",
+      "admin_edited INTEGER NOT NULL",
+      "submitter_visitor TEXT",
+      "submitter_ip_hash TEXT",
+      "created_at INTEGER NOT NULL",
+      "updated_at INTEGER NOT NULL"
+    ],
+    "dishes_fts": [
+      "title ",
+      "description ",
+      "region "
+    ],
+    "dishes_fts_config": [
+      "k  NOT NULL PK",
+      "v "
+    ],
+    "dishes_fts_data": [
+      "id INTEGER PK",
+      "block BLOB"
+    ],
+    "dishes_fts_docsize": [
+      "id INTEGER PK",
+      "sz BLOB"
+    ],
+    "dishes_fts_idx": [
+      "segid  NOT NULL PK",
+      "term  NOT NULL PK",
+      "pgno "
+    ],
+    "login_attempts": [
+      "id INTEGER PK",
+      "ts INTEGER NOT NULL",
+      "ip_hash TEXT NOT NULL",
+      "success INTEGER NOT NULL"
+    ],
+    "settings": [
+      "key TEXT PK",
+      "value TEXT NOT NULL"
+    ],
+    "used_tokens": [
+      "sig TEXT PK",
+      "expires_at INTEGER NOT NULL"
+    ],
+    "votes": [
+      "id INTEGER PK",
+      "dish_id INTEGER NOT NULL",
+      "visitor_id TEXT NOT NULL",
+      "category_id INTEGER",
+      "ip_hash TEXT NOT NULL",
+      "created_at INTEGER NOT NULL"
+    ]
+  }
+}
