@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 # plats.hosh.it — one container: FastAPI + SQLite. Non-root, read-only rootfs, state in /data.
 
-FROM python:3.12-slim-trixie AS build
+FROM python:3.14-slim-trixie AS build
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /venv
 COPY requirements.txt /tmp/requirements.txt
 RUN /venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
  && /venv/bin/pip uninstall -y pip
 
-FROM python:3.12-slim-trixie
+FROM python:3.14-slim-trixie
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="plats" \
