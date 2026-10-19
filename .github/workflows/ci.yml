@@ -1,9 +1,10 @@
 name: ci
 
 # push to main → tests → build → Trivy CRITICAL gate → push ghcr.io/pazka/plats:ci and :<sha>
+# agent/** branches get the same checks without a PR (nothing is pushed to ghcr for them).
 on:
   push:
-    branches: [main]
+    branches: [main, "agent/**"]
   pull_request:
   workflow_dispatch:
 
@@ -21,18 +22,18 @@ env:
 
 jobs:
   test:
+    # The image's Python (3.12) and the next ones, in the same slim-trixie base family as the Dockerfile.
+    name: test (python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    container: python:${{ matrix.python }}-slim-trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements*.txt
-      - run: pip install -r requirements-dev.txt
+      - run: pip install --no-cache-dir -r requirements-dev.txt
       - run: python -m pytest -q
-      - name: JS syntax check
-        run: node --check app/static/app.js && node --check app/static/admin.js
 
   image:
     needs: test
@@ -42,6 +43,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
+      - name: JS syntax check
+        run: node --check app/static/app.js && node --check app/static/admin.js
       - uses: docker/setup-buildx-action@v3
 
       - name: Build (local, for scanning)

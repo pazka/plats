@@ -1,0 +1,24 @@
+# Dependency updates with a cooldown (box contract rule 12): nothing younger than 7 days is proposed.
+# Every PR runs ci.yml (tests on Python 3.12/3.13/3.14, Trivy, hardened smoke, browser e2e).
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+  # One PR for all action bumps: separate PRs editing the same workflows conflict once one is merged.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor-patch:
+        update-types: [minor, patch]
