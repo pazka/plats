@@ -1,3 +1,5 @@
+# Tested minor/patch updates merge themselves (workflows/dependabot-merge.yml, box standard
+# hosh-migration Decision #18); majors get "needs-review". 7-day cooldown (Decision #17).
 # Dependency updates with a cooldown (box contract rule 12): nothing younger than 7 days is proposed.
 # Every PR runs ci.yml (tests on Python 3.12/3.13/3.14, Trivy, hardened smoke, browser e2e).
 version: 2
@@ -14,6 +16,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: pip
     directory: /
     schedule: { interval: weekly }
