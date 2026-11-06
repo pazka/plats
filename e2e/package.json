@@ -3,6 +3,6 @@
   "private": true,
   "description": "Browser end-to-end tests for plats (run via e2e/run.sh)",
   "devDependencies": {
-    "playwright": "1.56.1"
+    "playwright": "1.64.1"
   }
 }
