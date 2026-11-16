@@ -11,12 +11,24 @@ IMAGE="${1:-plats:local}"
 shift || true
 PORT="${VISUAL_PORT:-18300}"
 NAME="plats-visual-$$"
-trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
+# a throwaway admin (as e2e/run.sh), so /admin/login shows the configured form; never printed
+ADMIN_PASSWORD="visual-admin-password-$RANDOM$RANDOM"
+TOTP_SECRET="$(docker run --rm --network none "$IMAGE" python -c 'import pyotp; print(pyotp.random_base32())')"
+HASH="$(docker run --rm --network none -e P="$ADMIN_PASSWORD" "$IMAGE" python -c 'import os; from app.auth import hash_password; print(hash_password(os.environ["P"]))')"
+ENVFILE="$(mktemp)"
+trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -f "$ENVFILE"' EXIT
+chmod 600 "$ENVFILE"
+cat > "$ENVFILE" <<ENV
+PLATS_ADMIN_PASSWORD_HASH='$HASH'
+PLATS_ADMIN_TOTP_SECRET='$TOTP_SECRET'
+PLATS_COOKIE_SECURE=0
+PLATS_POW_DIFFICULTY=12
+HTTPS_PROXY=http://127.0.0.1:9
+HTTP_PROXY=http://127.0.0.1:9
+ENV
 
 docker run -d --name "$NAME" --read-only --tmpfs /tmp:size=16m --cap-drop ALL \
-  --security-opt no-new-privileges:true \
-  -e PLATS_COOKIE_SECURE=0 -e PLATS_POW_DIFFICULTY=12 \
-  -e HTTPS_PROXY=http://127.0.0.1:9 -e HTTP_PROXY=http://127.0.0.1:9 \
+  --security-opt no-new-privileges:true --env-file "$ENVFILE" \
   -p "127.0.0.1:$PORT:8000" "$IMAGE" >/dev/null
 for _ in $(seq 1 40); do
   curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 0.5

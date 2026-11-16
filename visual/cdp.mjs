@@ -14,6 +14,8 @@ export async function launch() {
     "--headless=new", "--no-sandbox", "--disable-gpu", "--mute-audio", "--no-first-run",
     "--hide-scrollbars", "--force-color-profile=srgb", "--font-render-hinting=none",
     "--disable-features=Translate,MediaRouter", "--disable-background-networking",
+    // a desktop visitor has a mouse (hover: hover, pointer: fine): headless Chrome would say "none"
+    "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
     `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "about:blank",
   ], { stdio: "ignore" });
   let url;
