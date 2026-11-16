@@ -103,7 +103,7 @@ jobs:
       # Visual regression (hosh-management AGENTS.md §3, use cases in TESTING.md): the runner's Chrome over
       # the DevTools protocol, Node built-ins only; every case at 1400 / 1024 / 390 against visual/baseline/.
       - name: Visual regression (screenshots vs baselines)
-        run: CHROME="$(command -v google-chrome)" OUT=visual/out visual/run.sh plats:scan
+        run: VISUAL_PRINT_NEW=1 CHROME="$(command -v google-chrome)" OUT=visual/out visual/run.sh plats:scan
 
       - name: Upload visual shots, diffs and report
         if: always()

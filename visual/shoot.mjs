@@ -5,12 +5,14 @@
 //   node visual/shoot.mjs <base url> [--update]
 //     OUT=visual/out (shots + diffs + report.json)   CHROME=/path/to/chrome (default google-chrome)
 //     --update: copy the new shots over the baselines (QA only, in a PR that says the change is wanted).
+//     VISUAL_PRINT_NEW=1: also print every failing shot in the log (visual/from-log.mjs takes them back).
 //
 // Determinism: animations and transitions off, caret hidden, scrollbars hidden, sRGB, a fixed viewport
 // height, random or dated content masked (cases.mjs). The baseline is only meaningful for the Chrome
 // that made it: report.json records the Chrome version, and a version change is reported as such.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { launch } from "./cdp.mjs";
 import { CASES, WIDTHS } from "./cases.mjs";
 
@@ -90,6 +92,13 @@ async function compare(a, b) {
   return r;
 }
 
+function printShot(name, png) {
+  const b64 = png.toString("base64");
+  const n = Math.ceil(b64.length / 8000);
+  const sum = createHash("sha256").update(png).digest("hex");
+  for (let i = 0; i < n; i++) console.log(`VISUAL-PNG ${name} ${i + 1}/${n} ${sum} ${b64.slice(i * 8000, (i + 1) * 8000)}`);
+}
+
 for (const c of CASES) {
   for (const width of WIDTHS) {
     for (const dark of c.dark ? [false, true] : [false]) {
@@ -127,6 +136,9 @@ for (const c of CASES) {
         }
       }
       report.shots.push(entry);
+      // VISUAL_PRINT_NEW=1 (CI): a shot without a matching baseline is also printed in the log, so an agent
+      // that cannot download artifacts can take it as the new baseline (visual/from-log.mjs).
+      if (process.env.VISUAL_PRINT_NEW && report.failures.some((f) => f.name === name)) printShot(name, shot.png);
       console.log(`${report.failures.some((f) => f.name === name) ? "FAIL" : "ok  "}  ${name}  ${entry.result}`);
     }
   }

@@ -114,5 +114,29 @@ block. Turn animations off (`prefers-reduced-motion: reduce`, already honoured b
 | M10 | Settings | `/admin/reglages` | toggles |
 | M11 | Audit log | `/admin/journal` | entries from the session |
 
-Status: list written, harness not built yet. Today `e2e/browser.cjs` takes functional screenshots (some at
-1280/1000/390) without baselines or a diff, so the visual regression check is not covered yet.
+Status (2026-11-16): **partial**. The harness `visual/` covers P1, B1–B5, D1, D6, S1, F1, F3, A1, M1 (and N1
+through every 390 px shot): 19 cases, 57 pictures. The others (P2–P5, D2–D5, S2, F2, F4, F5, E1, M2–M11)
+need answers, a login or admin data and come in a next QA PR.
+
+How it works:
+- `visual/run.sh IMAGE` starts the built image hardened (read-only, no caps, uid 10001, outbound HTTP to a
+  dead proxy), seeds it with `e2e/seed.py`, then `node visual/shoot.mjs` drives the runner's Chrome over the
+  DevTools protocol (Node built-ins only, no package). Each case is shot full page at 1400 / 1024 / 390 wide
+  (viewport height 900, touch at 390, dark where marked), animations and transitions off.
+- Masks (`visual/cases.mjs`): P1's dish title, description and region are replaced by fixed text and the
+  region is always shown (the server picks the dish at random); F3 hides `#pow-status`. S1 is the empty
+  seed, so its "par jour" block has no date in it. Below 900 px the page background of a full-page shot
+  stops: that is the screenshot method, not the page.
+- Comparison in Chrome (canvas): a pixel differs when a channel moves by more than 24; a case fails when
+  more than 0.1 % of its pixels differ, when the page size changes, on a page error, or when a baseline has
+  no case any more. CI (`image` job, step "Visual regression") uploads `visual-<sha>`: every shot, a red
+  diff picture per difference and `report.json`.
+- Baselines in `visual/baseline/`, made by the CI runner's Chrome (fonts differ elsewhere, so a local run
+  against them shows font differences; `visual/baseline/chrome.txt` names the Chrome). A wanted visual
+  change: the PR says so, takes the new shots from the `visual-<sha>` artifact into `visual/baseline/`, and
+  QA compares before and after. A new Chrome on the runner that moves pixels is a QA baseline PR of its own.
+  CI runs it with `VISUAL_PRINT_NEW=1`: every failing shot is also printed in the job log (chunked base64 +
+  sha256), and `node visual/from-log.mjs <job log> [dir]` writes them back, for an agent whose sandbox
+  cannot download Actions artifacts. Look at each picture before committing it.
+- Local: `docker build -t plats:local . && visual/run.sh plats:local` (needs node ≥ 22 and Chrome,
+  `CHROME=/path`); `visual/run.sh plats:local --update` rewrites the baselines (QA only).
