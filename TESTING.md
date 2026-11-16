@@ -122,7 +122,8 @@ How it works:
 - `visual/run.sh IMAGE` starts the built image hardened (read-only, no caps, uid 10001, outbound HTTP to a
   dead proxy), seeds it with `e2e/seed.py`, then `node visual/shoot.mjs` drives the runner's Chrome over the
   DevTools protocol (Node built-ins only, no package). Each case is shot full page at 1400 / 1024 / 390 wide
-  (viewport height 900, touch at 390, dark where marked), animations and transitions off.
+  (viewport height 900, dark where marked), animations and transitions off. 1400 and 1024 are shot in a
+  Chrome with a mouse (`hover: hover`, so the play page's key hints show), 390 in a touch Chrome without one.
 - Masks (`visual/cases.mjs`): P1's dish title, description and region are replaced by fixed text and the
   region is always shown (the server picks the dish at random); F3 hides `#pow-status`. S1 is the empty
   seed, so its "par jour" block has no date in it. Below 900 px the page background of a full-page shot

@@ -31,13 +31,16 @@ const FREEZE = `
   *, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }
   html { scroll-behavior: auto !important; }`;
 
-const browser = await launch();
+// desktop and laptop shots: a browser with a mouse; phone shots: a touch browser without one
+const desktop = await launch({ mouse: true });
+const phone = await launch({ mouse: false });
+const browser = desktop; // comparisons and the version
 const report = { chrome: browser.version, base, shots: [], failures: [] };
 console.log(`Chrome: ${browser.version}`);
 
 async function shoot(c, width, dark) {
-  const p = await browser.page();
   const mobile = width < 600;
+  const p = await (mobile ? phone : desktop).page();
   await p.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile });
   if (mobile) await p.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await p.send("Emulation.setEmulatedMedia", {
@@ -159,7 +162,8 @@ if (!update) {
   writeFileSync(join(BASE_DIR, "chrome.txt"), browser.version + "\n");
 }
 
-browser.close();
+desktop.close();
+phone.close();
 writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
 console.log(`\n${report.shots.length} shots, ${report.failures.length} failure(s)`);
 for (const f of report.failures) console.log(`  - ${f.name}: ${f.reason}`);

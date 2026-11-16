@@ -6,16 +6,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-/** Starts headless Chrome ($CHROME or google-chrome) and returns { page(), close() }. */
-export async function launch() {
+/**
+ * Starts headless Chrome ($CHROME or google-chrome) and returns { page(), close(), version }.
+ * mouse: the visitor has a mouse (hover: hover, pointer: fine); headless Chrome says "none" otherwise.
+ * A setting of the whole browser (it wins over touch emulation in recent Chrome), so phone shots use
+ * another browser without it.
+ */
+export async function launch({ mouse = false } = {}) {
   const profile = mkdtempSync(join(tmpdir(), "plats-visual-"));
   // port 0: Chrome picks a free port and writes it to <profile>/DevToolsActivePort (no collision)
   const chrome = spawn(process.env.CHROME || "google-chrome", [
     "--headless=new", "--no-sandbox", "--disable-gpu", "--mute-audio", "--no-first-run",
     "--hide-scrollbars", "--force-color-profile=srgb", "--font-render-hinting=none",
     "--disable-features=Translate,MediaRouter", "--disable-background-networking",
-    // a desktop visitor has a mouse (hover: hover, pointer: fine): headless Chrome would say "none"
-    "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+    ...(mouse ? ["--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4"] : []),
     "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank",
   ], { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
