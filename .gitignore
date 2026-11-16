@@ -16,3 +16,4 @@ plats.env
 !.env.example
 docker-compose.yml
 node_modules/
+visual/out/
