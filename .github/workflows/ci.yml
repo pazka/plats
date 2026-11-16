@@ -100,6 +100,19 @@ jobs:
           path: e2e/out/
           retention-days: 14
 
+      # Visual regression (hosh-management AGENTS.md §3, use cases in TESTING.md): the runner's Chrome over
+      # the DevTools protocol, Node built-ins only; every case at 1400 / 1024 / 390 against visual/baseline/.
+      - name: Visual regression (screenshots vs baselines)
+        run: VISUAL_PRINT_NEW=1 CHROME="$(command -v google-chrome)" OUT=visual/out visual/run.sh plats:scan
+
+      - name: Upload visual shots, diffs and report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-${{ github.sha }}
+          path: visual/out/
+          retention-days: 14
+
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v4
