@@ -1,29 +1,36 @@
 // Minimal Chrome DevTools Protocol client: Node built-ins only (fetch, WebSocket, child_process).
 // Same approach as pazka/hosh-hub tools/interact.mjs: no package is installed for the visual harness.
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 /** Starts headless Chrome ($CHROME or google-chrome) and returns { page(), close() }. */
 export async function launch() {
-  const port = 9300 + (process.pid % 500);
   const profile = mkdtempSync(join(tmpdir(), "plats-visual-"));
+  // port 0: Chrome picks a free port and writes it to <profile>/DevToolsActivePort (no collision)
   const chrome = spawn(process.env.CHROME || "google-chrome", [
     "--headless=new", "--no-sandbox", "--disable-gpu", "--mute-audio", "--no-first-run",
     "--hide-scrollbars", "--force-color-profile=srgb", "--font-render-hinting=none",
     "--disable-features=Translate,MediaRouter", "--disable-background-networking",
     // a desktop visitor has a mouse (hover: hover, pointer: fine): headless Chrome would say "none"
     "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-    `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "about:blank",
-  ], { stdio: "ignore" });
-  let url;
-  for (let i = 0; i < 100 && !url; i++) {
-    try { url = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()).webSocketDebuggerUrl; }
-    catch { await sleep(100); }
+    "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank",
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  chrome.stderr.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
+  let url, port;
+  for (let i = 0; i < 300 && !url; i++) {
+    try {
+      port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]);
+      url = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()).webSocketDebuggerUrl;
+    } catch { await sleep(100); }
   }
-  if (!url) { chrome.kill(); throw new Error("Chrome did not start (set CHROME=/path/to/chrome)"); }
+  if (!url) {
+    chrome.kill();
+    throw new Error(`Chrome did not start in 30 s (set CHROME=/path/to/chrome)\n${stderr}`);
+  }
   const version = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()).Browser;
   const ws = new WebSocket(url);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
