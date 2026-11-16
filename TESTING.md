@@ -78,7 +78,7 @@ block. Turn animations off (`prefers-reduced-motion: reduce`, already honoured b
 |---|---|---|---|
 | P1 | Play: first question | `GET /` with a fresh visitor cookie | dish card, category buttons with `kbd` hints (hidden on touch), skip; **live**; dark |
 | P2 | Play: after an answer | P1, click a category (also the no-JS `POST /voter` path) | `?apres=<slug>`: "x % ont répondu comme toi" panel + distribution bars, next dish |
-| P3 | Play: reward reached | answer 5 dishes (first `SMALL` step in `app/rewards.py`, "Bien joué !"); also 25 for the first badge | reward rendered by `static/app.js` |
+| P3 | Play: reward reached | answer 5 dishes (`SMALL` milestone "Bien joué !"), 25 ("SUPER !", palette `neon`), 30 (first badge "🥄 Commis de cuisine"; 45 seeded dishes are enough), see `app/rewards.py` | reward rendered by `static/app.js`; animations off |
 | P4 | Play: no question left | visitor who has answered or skipped every active dish (or an empty catalogue) | `#end` section shown, dish card hidden |
 | P5 | Play: dish with an image and credit | dish with `image`, `image_author` and licence set (admin edit) | `figure` + `figcaption` |
 | B1 | Browse: list A→Z | `GET /plats` | count line, chips with top category, pagination (45 dishes > 1 page); **live** |
