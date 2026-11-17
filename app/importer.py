@@ -294,7 +294,10 @@ def run_logged(db_path: Path, images_dir: Path, *, enrich: bool, images: bool,
             db.set_setting(conn, "import_status", json.dumps(kw, ensure_ascii=False))
 
         started = int(time.time())
+        t0 = time.perf_counter()
         status(state="running", started=started, actor=actor)
+        log.info(json.dumps({"event": "import_start", "msg": "wikidata import started", "actor": actor,
+                             "enrich": enrich, "images": images}))
         try:
             with (client or make_client()) as http:
                 summary = run_import(
@@ -302,14 +305,16 @@ def run_logged(db_path: Path, images_dir: Path, *, enrich: bool, images: bool,
                     progress=lambda n, total: status(state="running", started=started, actor=actor,
                                                      progress=f"{n}/{total}"))
         except Exception as exc:  # noqa: BLE001 - reported to the admin
-            log.error(json.dumps({"event": "import_failed", "message": "wikidata import failed",
+            log.error(json.dumps({"event": "import_failed", "msg": "wikidata import failed",
+                                  "dur_ms": round((time.perf_counter() - t0) * 1000),
                                   "error": f"{type(exc).__name__}: {exc}"[:500]}))
             status(state="error", started=started, finished=int(time.time()), error=str(exc)[:500])
             db.audit(conn, "import_wikidata_failed", str(exc)[:500])
             raise
         status(state="done", started=started, finished=int(time.time()), summary=summary, actor=actor)
         db.audit(conn, "import_wikidata", json.dumps(summary))
-        log.info(json.dumps({"event": "import_done", **summary}))
+        log.info(json.dumps({"event": "import_done", "msg": "wikidata import done",
+                             "dur_ms": round((time.perf_counter() - t0) * 1000), **summary}))
         return summary
     finally:
         conn.close()

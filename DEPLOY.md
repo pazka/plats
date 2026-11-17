@@ -80,6 +80,7 @@ One file feeds both docker compose (interpolation) and the container.
 | `PLATS_CONTACT` | GitHub link | shown on `/a-propos` |
 | `PLATS_POW_DIFFICULTY` | `16` | proposal proof-of-work bits (≈1 s on a phone) |
 | `PLATS_LOG_CLIENT_IP` | `0` | 1 = raw IP in stdout security lines (never in the DB) |
+| `LOG_LEVEL` | `info` | `debug` also logs every request (one line each); `warn` / `error` keep only those |
 
 Single-quoted values are literal for compose (the `$` of the argon2 hash is safe); the app also
 strips quotes itself if the file is used with `docker run --env-file`.
@@ -95,7 +96,7 @@ strips quotes itself if the file is used with `docker run --env-file`.
 | Volume | **`plats_plats-data`** → `/data`: `plats.sqlite3` (+WAL), `.secrets/`, `images/` (optional). Under `/var/lib/docker/volumes`, so in the monthly restic golden backup |
 | Health | **`GET /healthz`** → `{"status":"ok","schema":2,"active_dishes":N,"categories":10}` (Docker healthcheck too); `HEAD` supported |
 | Migrations | automatic at start |
-| Logs | JSON lines on stdout, `ip_hash` only (no raw IP); Traefik's access log covers the host for CrowdSec |
+| Logs | JSON lines on stdout (hosh-management AGENTS.md §11: `ts level service version event msg`, `req_id` = `X-Request-Id`), `ip_hash` only (no raw IP); requests are logged only on 5xx, 4xx under `/admin` or > 1 s (all of them with `LOG_LEVEL=debug`); Traefik's access log covers the host for CrowdSec |
 | Outbound | only the importer: `query.wikidata.org`, `fr.wikipedia.org` (+ `commons.wikimedia.org`, `upload.wikimedia.org` with `--images`) |
 
 ## 4. Operations
