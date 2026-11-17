@@ -52,7 +52,10 @@ Regenerate the schema snapshot only together with a new migration:
 `tests/test_logging.py` pins the logging standard (hosh-management AGENTS.md §11): the `startup` and
 `shutdown` lines (fields, no secret value), one `error` line with `err` {type, message, stack} and the route
 template (never the raw path) on an unhandled exception, which requests are logged at info+ (5xx, admin 4xx,
-slow) and which stay at debug, `X-Request-Id` echoed or generated, `LOG_LEVEL=debug`, security events.
+slow, with a slow route) and which stay at debug, `X-Request-Id` echoed or generated, `LOG_LEVEL=debug`,
+security events, the importer job lines (`import_start`, `import_done` with `dur_ms` and counts,
+`import_failed`). `tests/test_monitor_logs.py` pins the e2e log gate `scripts/monitor_logs.py`
+(new and old line formats, `err` as a dict, `--fail-on-error` exit codes, `--ignore`).
 
 ## Deliberately not covered
 

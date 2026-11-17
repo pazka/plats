@@ -132,3 +132,73 @@ def test_security_event_has_route_and_req_id(client, logs):
     for r in ev:
         _check_format(r)
         assert r["level"] == "warn" and r["route"] == "/admin/login" and r["req_id"] == "sec-1"
+
+
+def test_slow_request_is_logged_at_warn_and_a_fast_one_stays_at_debug(settings, logs, monkeypatch):
+    import time
+
+    import app.main as main
+    monkeypatch.setattr(main, "SLOW_MS", 200)
+    app = create_app(settings)
+
+    @app.get("/slow/{n}")
+    def slow(n: int):
+        time.sleep(0.3)
+        return {"n": n}
+
+    @app.get("/fast/{n}")
+    def fast(n: int):
+        return {"n": n}
+
+    with TestClient(app, base_url="https://testserver") as c:
+        logs()  # drop the startup line
+        assert c.get("/fast/1").status_code == 200
+        assert [r for r in logs() if r["event"] == "http"] == [], "a fast 2xx stays at debug"
+        assert c.get("/slow/2?q=x").status_code == 200
+    recs = [r for r in logs() if r["event"] == "http"]
+    assert len(recs) == 1, recs
+    r = recs[0]
+    _check_format(r)
+    assert r["level"] == "warn" and r["status"] == 200 and r["route"] == "/slow/{n}"
+    assert r["dur_ms"] >= 300 and "q=x" not in json.dumps(r)
+
+
+def _import_lines(recs):
+    return {r["event"]: r for r in recs if r["event"].startswith("import_")}
+
+
+def test_import_job_logs_start_and_done_with_dur_ms_and_counts(app, logs):
+    import httpx
+
+    from app import importer
+    from tests.test_importer import handler_factory
+    s = app.state.settings
+    client = importer.make_client(httpx.MockTransport(handler_factory([])))
+    summary = importer.run_logged(s.db_path, s.images_dir, enrich=False, images=False, client=client, actor="test")
+    lines = _import_lines(logs())
+    assert set(lines) == {"import_start", "import_done"}, lines
+    for r in lines.values():
+        _check_format(r)
+        assert r["level"] == "info"
+    assert lines["import_start"]["actor"] == "test"
+    done = lines["import_done"]
+    assert isinstance(done["dur_ms"], int) and done["dur_ms"] >= 0
+    assert done["created"] == summary["created"] == 4
+    assert {k: done[k] for k in summary} == summary, "every count of the summary is on the done line"
+
+
+def test_import_job_failure_logs_one_error_line_with_dur_ms(app, logs):
+    import httpx
+
+    from app import importer
+    s = app.state.settings
+    client = importer.make_client(httpx.MockTransport(lambda r: httpx.Response(503)))
+    with pytest.raises(httpx.HTTPStatusError):
+        importer.run_logged(s.db_path, s.images_dir, enrich=False, images=False, client=client)
+    lines = _import_lines(logs())
+    assert set(lines) == {"import_start", "import_failed"}, lines
+    failed = lines["import_failed"]
+    _check_format(failed)
+    assert failed["level"] == "error" and failed["msg"] == "wikidata import failed"
+    assert isinstance(failed["dur_ms"], int) and failed["dur_ms"] >= 0
+    assert failed["error"].startswith("HTTPStatusError")
