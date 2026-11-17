@@ -8,6 +8,10 @@ Live watch (alerts printed immediately, summary every 5 min):
 CI / scripted check (exit 1 on any error line or HTTP 5xx):
     docker logs plats 2>&1 | python3 scripts/monitor_logs.py --fail-on-error
 
+Since the logging standard (hosh-management AGENTS.md section 11) the app logs only the requests that
+matter (5xx, 4xx on /admin, slower than 1 s; LOG_LEVEL=debug logs them all), so "requests" below counts
+those lines, not the traffic (Traefik's access log has it). Older lines (path/ms/exc/message) still parse.
+
 Alerts: level error/critical, HTTP 5xx, tracebacks, admin login lockouts, CSRF failures,
 bursts of rate limiting. Raw IPs never appear in the logs (only ip_hash), unless
 PLATS_LOG_CLIENT_IP=1.
@@ -65,11 +69,11 @@ class Stats:
             status = int(rec.get("status", 0) or 0)
             self.status[f"{status // 100}xx"] += 1
             if status >= 400:
-                self.paths_err[f"{status} {rec.get('method', '')} {rec.get('path', '')}"] += 1
+                self.paths_err[f"{status} {rec.get('method', '')} {rec.get('route', rec.get('path', ''))}"] += 1
             if status >= 500:
-                alerts.append(f"HTTP {status} on {rec.get('method')} {rec.get('path')}")
+                alerts.append(f"HTTP {status} on {rec.get('method')} {rec.get('route', rec.get('path'))}")
             try:
-                self.latencies.append(float(rec.get("ms", 0)))
+                self.latencies.append(float(rec.get("dur_ms", rec.get("ms", 0))))
             except (TypeError, ValueError):
                 pass
             if rec.get("ip_hash"):
@@ -80,10 +84,13 @@ class Stats:
                 if rec.get(key):
                     self.reasons[event][str(rec[key])] += 1
             if event in ALERT_EVENTS:
-                alerts.append(f"{event}: {json.dumps({k: v for k, v in rec.items() if k not in ('ts', 'logger')})}")
-        if level in ("error", "critical") or rec.get("exc"):
-            msg = rec.get("message") or event or "error"
-            self.errors.append(f"{rec.get('ts', '')} {msg} {str(rec.get('exc', ''))[-300:]}".strip())
+                alerts.append(f"{event}: {json.dumps({k: v for k, v in rec.items() if k not in ('ts', 'logger', 'service', 'version')})}")
+        if level in ("error", "critical") or rec.get("exc") or rec.get("err"):
+            msg = rec.get("msg") or rec.get("message") or event or "error"
+            err = rec.get("err") or rec.get("exc") or ""
+            if isinstance(err, dict):
+                err = f"{err.get('type', '')}: {err.get('message', '')} {err.get('stack', '')}"
+            self.errors.append(f"{rec.get('ts', '')} {msg} {str(err)[-300:]}".strip())
             alerts.append(f"{level.upper() or 'ERROR'}: {msg}")
         if event == "rate_limited" and self.events["rate_limited"] in (20, 100, 500):
             alerts.append(f"rate limiting is firing a lot ({self.events['rate_limited']} so far): {dict(self.reasons['rate_limited'])}")
@@ -96,7 +103,7 @@ class Stats:
     def report(self) -> str:
         out = [f"== plats log summary: {self.lines} lines ({self.non_json} non-JSON) =="]
         total = sum(self.status.values())
-        out.append(f"requests: {total}  " + "  ".join(f"{k}: {v}" for k, v in sorted(self.status.items())))
+        out.append(f"requests logged (5xx, admin 4xx, slow): {total}  " + "  ".join(f"{k}: {v}" for k, v in sorted(self.status.items())))
         if self.latencies:
             lat = sorted(self.latencies)
             p = lambda q: lat[min(len(lat) - 1, int(q * len(lat)))]  # noqa: E731

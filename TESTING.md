@@ -49,6 +49,11 @@ migrations 1→2.
 Regenerate the schema snapshot only together with a new migration:
 `UPDATE_SCHEMA_SNAPSHOT=1 python -m pytest tests/test_upgrade.py`.
 
+`tests/test_logging.py` pins the logging standard (hosh-management AGENTS.md §11): the `startup` and
+`shutdown` lines (fields, no secret value), one `error` line with `err` {type, message, stack} and the route
+template (never the raw path) on an unhandled exception, which requests are logged at info+ (5xx, admin 4xx,
+slow) and which stay at debug, `X-Request-Id` echoed or generated, `LOG_LEVEL=debug`, security events.
+
 ## Deliberately not covered
 
 - Live Wikidata/Wikimedia (`wikidata-live.yml`, manual dispatch only).
