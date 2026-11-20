@@ -8,7 +8,7 @@ Actions): a Dependabot PR is mergeable on a green `ci` run alone.
 In the image's base family, so nothing runs on the host:
 
 ```bash
-for v in 3.12 3.14; do
+for v in 3.12 3.13 3.14; do
   docker run --rm -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/app:ro -w /app -v plats_venv$v:/venv \
     python:$v-slim-trixie sh -c "[ -x /venv/bin/python ] || python -m venv /venv;
       /venv/bin/pip install -q -r requirements-dev.txt && /venv/bin/python -m pytest -p no:cacheprovider"
@@ -20,7 +20,7 @@ done
 Image on the next Python before Dependabot proposes it:
 
 ```bash
-sed 's/python:3.12-slim-trixie/python:3.14-slim-trixie/g' Dockerfile | docker build -f - -t plats:next .
+sed 's/python:3.14-slim-trixie/python:3.15-slim-trixie/g' Dockerfile | docker build -f - -t plats:next .
 ```
 
 then run the `Container smoke test` step of `ci.yml` against `plats:next`.
