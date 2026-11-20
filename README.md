@@ -10,13 +10,13 @@ thanks for every answer, public statistics per dish.
 
 ## Stack
 
-Python 3.12 · FastAPI · Jinja2 · SQLite (WAL, FTS5) · vanilla JS/CSS — one container, no CDN,
+Python 3.14 · FastAPI · Jinja2 · SQLite (WAL, FTS5) · vanilla JS/CSS — one container, no CDN,
 no external fonts, no analytics.
 
 ## Develop
 
 ```sh
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+python3.14 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest                       # test suite (no network needed)
 PLATS_DATA_DIR=./data PLATS_COOKIE_SECURE=0 .venv/bin/uvicorn --factory app.main:run --reload
 .venv/bin/python scripts/import_wikidata.py      # optional: load the Wikidata catalogue
