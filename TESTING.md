@@ -8,7 +8,7 @@ Actions): a Dependabot PR is mergeable on a green `ci` run alone.
 In the image's base family, so nothing runs on the host:
 
 ```bash
-for v in 3.12 3.13 3.14; do
+for v in 3.12 3.13 3.14 3.15; do
   docker run --rm -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD":/app:ro -w /app -v plats_venv$v:/venv \
     python:$v-slim-trixie sh -c "[ -x /venv/bin/python ] || python -m venv /venv;
       /venv/bin/pip install -q -r requirements-dev.txt && /venv/bin/python -m pytest -p no:cacheprovider"
@@ -20,14 +20,14 @@ done
 Image on the next Python before Dependabot proposes it:
 
 ```bash
-sed 's/python:3.14-slim-trixie/python:3.15-slim-trixie/g' Dockerfile | docker build -f - -t plats:next .
+sed 's/python:3.15-slim-trixie/python:3.16-slim-trixie/g' Dockerfile | docker build -f - -t plats:next .
 ```
 
 then run the `Container smoke test` step of `ci.yml` against `plats:next`.
 
 ## CI (`.github/workflows/ci.yml`)
 
-PRs, `main` and `agent/**` branches. `test (python 3.12|3.13|3.14)` runs pytest inside
+PRs, `main` and `agent/**` branches. `test (python 3.12|3.13|3.14|3.15)` runs pytest inside
 `python:<v>-slim-trixie`. `image`: JS syntax check, build, Trivy CRITICAL gate, hardened container smoke
 (`scripts/smoke.py`, uid 10001, read-only rootfs), browser e2e. Only `main` pushes to ghcr.
 
@@ -66,6 +66,10 @@ security events, the importer job lines (`import_start`, `import_done` with `dur
 
 - **Python 3.12 → 3.14** (2026-10-19): 178/178 tests on 3.12.15, 3.13.16, 3.14.8; image rebuilt on
   `python:3.14-slim-trixie` healthy, uid 10001, `scripts/smoke.py` all checks passed → go.
+- **Python 3.14 → 3.15** (2026-11-23, supersedes Dependabot #11): 191/191 tests on 3.15.2 (`python:3.15-slim-trixie`)
+  with the unchanged `requirements-dev.txt` pins (every compiled package has a 3.15 wheel: argon2-cffi-bindings,
+  cffi, pydantic-core, RapidFuzz, MarkupSafe); no new warning against 3.14. The image, Trivy gate, hardened
+  smoke, browser e2e and visual regression are proven by `ci` on the PR. The matrix keeps 3.12–3.14.
 - Known upcoming break: Starlette warns that `TestClient` over `httpx` is deprecated (`httpx2`). When a
   Starlette bump removes it, the test client import is what fails, not the app.
 
