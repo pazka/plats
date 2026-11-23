@@ -10,7 +10,7 @@ thanks for every answer, public statistics per dish.
 
 ## Stack
 
-Python 3.14 · FastAPI · Jinja2 · SQLite (WAL, FTS5) · vanilla JS/CSS — one container, no CDN,
+Python 3.15 · FastAPI · Jinja2 · SQLite (WAL, FTS5) · vanilla JS/CSS — one container, no CDN,
 no external fonts, no analytics.
 
 ## Develop

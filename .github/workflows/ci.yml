@@ -22,14 +22,14 @@ env:
 
 jobs:
   test:
-    # The image's Python (3.12) and the next ones, in the same slim-trixie base family as the Dockerfile.
+    # The image's Python (3.15) and the three before it, in the same slim-trixie base family as the Dockerfile.
     name: test (python ${{ matrix.python }})
     runs-on: ubuntu-latest
     container: python:${{ matrix.python }}-slim-trixie
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13", "3.14"]
+        python: ["3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
       - run: pip install --no-cache-dir -r requirements-dev.txt

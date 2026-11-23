@@ -42,7 +42,7 @@ resolver `le`, loopback port `127.0.0.1:9131`, `/srv/plats`, releases deploy thr
 
 ## Maintenance (autonomous agent)
 Keep Python, pip packages, the base image and Actions current **without changing behaviour**. Read `TESTING.md`.
-- Gate = `ci` green: `test (python 3.12|3.13|3.14)` + `image`. Work on `agent/<topic>` branches (CI runs,
+- Gate = `ci` green: `test (python 3.12|3.13|3.14|3.15)` + `image`. Work on `agent/<topic>` branches (CI runs,
   nothing is pushed to ghcr). Don't push to `main`, tag or release unless the owner asks: a release deploys.
 - Dependabot PRs (weekly, 7-day cooldown): green → summarise risk in a PR comment; red → reproduce per
   TESTING.md and fix with the smallest change. When the Dockerfile moves to a new Python, move the test
